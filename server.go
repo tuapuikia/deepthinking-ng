@@ -34,6 +34,7 @@ type ThoughtResponse struct {
 	NextThoughtNeeded    bool     `json:"nextThoughtNeeded"`
 	Branches             []string `json:"branches"`
 	ThoughtHistoryLength int      `json:"thoughtHistoryLength"`
+	SessionID            string   `json:"sessionId"`
 	
 	// GPT Workflow response fields
 	Phase                string   `json:"phase,omitempty"`
@@ -219,6 +220,7 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 		Branches:             branches,
 		ThoughtHistoryLength: len(s.thoughtHistory),
 		Phase:                input.Phase,
+		SessionID:            s.shm.GetSessionID(),
 	}
 
 	// GPT Workflow Logic

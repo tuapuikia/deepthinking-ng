@@ -38,7 +38,18 @@ You can configure the server using environment variables:
 |----------------------|-------------|---------|
 | `THINKING_WORKER_COUNT` | Number of workers for the Gather phase. | `5` |
 | `SHM_ROOT` | Root directory for shared memory storage. | `/dev/shm/deepthinking-ng` |
+| `GEMINI_SESSION_ID` | Unique ID for the session to isolate shared memory. | `<Random UUID>` |
 | `DISABLE_THOUGHT_LOGGING` | Set to `true` to disable console logging of thoughts. | `false` |
+
+## Session Isolation
+
+To prevent collisions between different `gemini-cli` instances, the server automatically isolates shared memory into session-specific subdirectories under `SHM_ROOT`. 
+
+- **Random UUID**: By default, it generates a random 128-bit UUID (hex encoded) as the session identifier when the server starts. This ID remains stable for the entire life of the server process and is returned in every tool response as `sessionId`.
+- **Manual Override**: You can override this by setting the `GEMINI_SESSION_ID` environment variable if you need to maintain state across server restarts.
+
+> [!IMPORTANT]
+> **Non-Persistent Memory Warning**: The memory stored in `/dev/shm` is a RAM-based filesystem. It is **NOT persistent** and will be lost if the system reboots or if the shared memory is cleared. Do not use this for long-term storage; it is strictly for high-performance, short-term coordination between thinking workers.
 
 ## Tools
 
