@@ -31,7 +31,7 @@ func main() {
 This tool helps analyze problems through a flexible thinking process that can adapt and evolve.
 
 GPT Workflow:
-- G (Gather): Multiple workers (default 5) generate different solutions.
+- G (Gather): Multiple workers (default 5) generate different solutions. You MUST use this phase to explore at least 5 different perspectives before moving to 'process'.
 - P (Process): A single worker processes the chosen solution.
 - T (Test): A single worker tests and verifies the result.
 

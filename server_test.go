@@ -14,7 +14,7 @@ func TestSequentialThinking(t *testing.T) {
 		nextNeeded := true
 		args := ThoughtData{
 			Thought:           thought,
-			NextThoughtNeeded: &nextNeeded,
+			NextThoughtNeeded: nextNeeded,
 		}
 
 		resp, err := server.ProcessThought(args)
@@ -37,7 +37,7 @@ func TestSequentialThinking(t *testing.T) {
 		nextNeeded := true
 		args := ThoughtData{
 			Thought:           "Second thought",
-			NextThoughtNeeded: &nextNeeded,
+			NextThoughtNeeded: nextNeeded,
 		}
 
 		resp, err := server.ProcessThought(args)
@@ -65,7 +65,7 @@ func TestSequentialThinking(t *testing.T) {
 				Phase:               "gather",
 				WorkerID:            i,
 				ThinkingWorkerCount: workerCount,
-				NextThoughtNeeded:   &nextNeeded,
+				NextThoughtNeeded:   nextNeeded,
 			}
 			resp, err := server.ProcessThought(args)
 			if err != nil {
@@ -102,7 +102,7 @@ func TestSequentialThinking(t *testing.T) {
 				Phase:               "gather",
 				WorkerID:            i,
 				ThinkingWorkerCount: workerCount,
-				NextThoughtNeeded:   &nextNeeded,
+				NextThoughtNeeded:   nextNeeded,
 			}
 			resp, err := server.ProcessThought(args)
 			if err != nil {
@@ -128,11 +128,79 @@ func TestSequentialThinking(t *testing.T) {
 		}
 	})
 
+	t.Run("Strict Workflow Enforcement", func(t *testing.T) {
+		server.shm.ClearAll()
+		server.thoughtHistory = nil
+		nextNeeded := true
+
+		// 1. Try to enter process before gather is done -> should fail
+		argsProcess := ThoughtData{
+			Thought:             "Processing without gathering",
+			Phase:               "process",
+			WorkerID:            1,
+			ThinkingWorkerCount: 3,
+			NextThoughtNeeded:   nextNeeded,
+		}
+		_, err := server.ProcessThought(argsProcess)
+		if err == nil {
+			t.Error("Expected error when entering 'process' phase before 'gather' is complete")
+		} else if err.Error() != "STRICT WORKFLOW VIOLATION: Cannot enter 'process' phase. 'gather' phase is incomplete. You must gather perspectives from 3 workers (currently have 0). Use phase='gather' with different workerIds" {
+			t.Errorf("Unexpected error message: %v", err)
+		}
+
+		// 2. Do a partial gather
+		argsGather := ThoughtData{
+			Thought:             "Gather 1",
+			Phase:               "gather",
+			WorkerID:            1,
+			ThinkingWorkerCount: 2,
+			NextThoughtNeeded:   nextNeeded,
+		}
+		server.ProcessThought(argsGather)
+
+		// 3. Try process again -> should fail
+		argsProcess.ThinkingWorkerCount = 2
+		_, err = server.ProcessThought(argsProcess)
+		if err == nil {
+			t.Error("Expected error when entering 'process' phase with partial 'gather'")
+		}
+
+		// 4. Try test without process -> should fail
+		argsTest := ThoughtData{
+			Thought:             "Testing",
+			Phase:               "test",
+			WorkerID:            1,
+			NextThoughtNeeded:   nextNeeded,
+		}
+		_, err = server.ProcessThought(argsTest)
+		if err == nil {
+			t.Error("Expected error when entering 'test' phase before 'process' is complete")
+		} else if err.Error() != "STRICT WORKFLOW VIOLATION: Cannot enter 'test' phase. 'process' phase is incomplete. You must process the gathered ideas first using phase='process'" {
+			t.Errorf("Unexpected error message: %v", err)
+		}
+
+		// 5. Complete gather
+		argsGather.WorkerID = 2
+		server.ProcessThought(argsGather)
+
+		// 6. Try process -> should succeed
+		_, err = server.ProcessThought(argsProcess)
+		if err != nil {
+			t.Errorf("Expected success when entering 'process' phase after 'gather' is complete, got: %v", err)
+		}
+
+		// 7. Try test -> should succeed
+		_, err = server.ProcessThought(argsTest)
+		if err != nil {
+			t.Errorf("Expected success when entering 'test' phase after 'process', got: %v", err)
+		}
+	})
+
 	t.Run("Completion and Cleanup", func(t *testing.T) {
 		nextNeeded := false
 		args := ThoughtData{
 			Thought:           "Final conclusion",
-			NextThoughtNeeded: &nextNeeded,
+			NextThoughtNeeded: nextNeeded,
 		}
 
 		_, err := server.ProcessThought(args)
@@ -151,7 +219,7 @@ func TestSequentialThinking(t *testing.T) {
 func TestResetThinking(t *testing.T) {
 	server := NewSequentialThinkingServer()
 	nextNeeded := true
-	server.ProcessThought(ThoughtData{Thought: "Test", NextThoughtNeeded: &nextNeeded})
+	server.ProcessThought(ThoughtData{Thought: "Test", NextThoughtNeeded: nextNeeded})
 
 	err := server.shm.ClearAll()
 	if err != nil {

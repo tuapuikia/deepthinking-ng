@@ -177,8 +177,9 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 	}
 
 	// Validate phase
+	input.Phase = strings.ToLower(input.Phase)
 	validPhases := map[string]bool{"gather": true, "process": true, "test": true}
-	if !validPhases[strings.ToLower(input.Phase)] {
+	if !validPhases[input.Phase] {
 		return ThoughtResponse{}, fmt.Errorf("invalid phase: %s. Must be 'gather', 'process', or 'test'", input.Phase)
 	}
 
@@ -188,6 +189,20 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 	if input.WorkerID == 0 {
 		input.WorkerID = 1
 	}
+
+	// --- STRICT GPT WORKFLOW ENFORCEMENT ---
+	if input.Phase == "process" {
+		gatherThoughts, _ := s.shm.GetPhaseThoughts("gather")
+		if len(gatherThoughts) < input.ThinkingWorkerCount {
+			return ThoughtResponse{}, fmt.Errorf("STRICT WORKFLOW VIOLATION: Cannot enter 'process' phase. 'gather' phase is incomplete. You must gather perspectives from %d workers (currently have %d). Use phase='gather' with different workerIds", input.ThinkingWorkerCount, len(gatherThoughts))
+		}
+	} else if input.Phase == "test" {
+		processThoughts, _ := s.shm.GetPhaseThoughts("process")
+		if len(processThoughts) == 0 {
+			return ThoughtResponse{}, fmt.Errorf("STRICT WORKFLOW VIOLATION: Cannot enter 'test' phase. 'process' phase is incomplete. You must process the gathered ideas first using phase='process'")
+		}
+	}
+	// ---------------------------------------
 
 	s.thoughtHistory = append(s.thoughtHistory, input)
 
@@ -255,15 +270,23 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 }
 
 func (s *SequentialThinkingServer) synthesizeSuperIdea(thoughts []ThoughtData) string {
-	// Simple synthesis: combine key points. 
-	// In a real scenario, this might be another LLM call, 
-	// but here we provide a structured summary to help the LLM synthesize.
 	var sb strings.Builder
-	sb.WriteString("Super Idea Synthesis:\n")
-	sb.WriteString("Combined the following perspectives:\n")
+	sb.WriteString("🚀 SUPER IDEA SYNTHESIS\n")
+	sb.WriteString("=======================\n\n")
+	sb.WriteString("The following perspectives have been gathered and analyzed:\n\n")
+	
 	for _, t := range thoughts {
-		sb.WriteString(fmt.Sprintf("- Perspective from Worker %d: %s\n", t.WorkerID, t.Thought))
+		sb.WriteString(fmt.Sprintf("📍 Worker %d Perspective:\n", t.WorkerID))
+		sb.WriteString(fmt.Sprintf("   \"%s\"\n\n", t.Thought))
 	}
-	sb.WriteString("\nRecommended Action: Evaluate the strengths of each worker's proposal and merge them into a single, robust implementation plan for the 'Process' phase.")
+	
+	sb.WriteString("🎯 INTEGRATED STRATEGY:\n")
+	sb.WriteString("----------------------\n")
+	sb.WriteString("1. Evaluate the unique strengths and potential pitfalls identified in each perspective.\n")
+	sb.WriteString("2. Synthesize a unified approach that incorporates the best elements of all proposals.\n")
+	sb.WriteString("3. Address any contradictions or trade-offs identified during the gather phase.\n\n")
+	
+	sb.WriteString("➡️ NEXT STEP: Proceed to the 'PROCESS' phase to implement this integrated strategy.")
+	
 	return sb.String()
 }
