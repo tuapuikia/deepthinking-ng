@@ -1,4 +1,4 @@
-module deepthinking-ng
+module github.com/tuapuikia/deepthinking-ng
 
 go 1.26.2
 
