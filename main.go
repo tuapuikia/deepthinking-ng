@@ -31,7 +31,7 @@ func main() {
 This tool helps analyze problems through a flexible thinking process that can adapt and evolve.
 
 GPT Workflow:
-- G (Gather): Multiple workers (default 3) generate different solutions.
+- G (Gather): Multiple workers (default 5) generate different solutions.
 - P (Process): A single worker processes the chosen solution.
 - T (Test): A single worker tests and verifies the result.
 
@@ -45,7 +45,7 @@ Parameters:
 - totalThoughts: Current estimate of thoughts needed.
 - phase: "gather", "process", or "test" (default: "gather").
 - workerId: ID of the current worker (1, 2, 3...).
-- thinkingWorkerCount: Total number of workers for the Gather phase (default: 3).
+- thinkingWorkerCount: Total number of workers for the Gather phase (default: 5).
 - isRevision: Boolean indicating if this revises previous thinking.
 - revisesThought: Which thought number is being reconsidered.
 - branchFromThought: Which thought number is the branching point.

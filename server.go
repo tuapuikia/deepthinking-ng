@@ -24,7 +24,7 @@ type ThoughtData struct {
 	// GPT Workflow fields
 	Phase               string  `json:"phase,omitempty"`               // "gather", "process", "test"
 	WorkerID            int     `json:"workerId,omitempty"`            // 1, 2, 3...
-	ThinkingWorkerCount int     `json:"thinkingWorkerCount,omitempty"` // default 3
+	ThinkingWorkerCount int     `json:"thinkingWorkerCount,omitempty"` // default 5
 }
 
 // ThoughtResponse represents the structured output of a thinking step.

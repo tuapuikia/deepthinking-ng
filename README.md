@@ -5,7 +5,7 @@ A high-performance Sequential Thinking MCP server with **GPT (Gather, Process, T
 ## Features
 
 - **GPT Workflow**:
-  - **Gather (G)**: Multiple workers (default 3) generate diverse solutions.
+  - **Gather (G)**: Multiple workers (default 5) generate diverse solutions.
   - **Process (P)**: A single worker implements the chosen solution.
   - **Test (T)**: A single worker verifies the result.
 - **Shared Memory**: Uses `/dev/shm` to share thoughts between workers in the Gather phase, enabling the synthesis of a "Super Idea".
@@ -36,7 +36,7 @@ You can configure the server using environment variables:
 
 | Environment Variable | Description | Default |
 |----------------------|-------------|---------|
-| `THINKING_WORKER_COUNT` | Number of workers for the Gather phase. | `3` |
+| `THINKING_WORKER_COUNT` | Number of workers for the Gather phase. | `5` |
 | `SHM_ROOT` | Root directory for shared memory storage. | `/dev/shm/deepthinking-ng` |
 | `DISABLE_THOUGHT_LOGGING` | Set to `true` to disable console logging of thoughts. | `false` |
 
@@ -67,7 +67,9 @@ Resets the thinking session and clears all shared memory in `/dev/shm`.
    - Worker 1: `{"thought": "Solution A...", "phase": "gather", "workerId": 1}`
    - Worker 2: `{"thought": "Solution B...", "phase": "gather", "workerId": 2}`
    - Worker 3: `{"thought": "Solution C...", "phase": "gather", "workerId": 3}`
-   - *Result*: The tool returns all 3 solutions and a synthesized **Super Idea**.
+   - Worker 4: `{"thought": "Solution D...", "phase": "gather", "workerId": 4}`
+   - Worker 5: `{"thought": "Solution E...", "phase": "gather", "workerId": 5}`
+   - *Result*: The tool returns all 5 solutions and a synthesized **Super Idea**.
 
 2. **Process Phase**:
    - Worker 1: `{"thought": "Implementing Super Idea...", "phase": "process", "workerId": 1}`
