@@ -108,7 +108,7 @@ Parameters:
 					"description": "Whether more thoughts are needed",
 				},
 			},
-			Required: []string{"thought"},
+			Required: []string{"thought", "thoughtNumber", "totalThoughts", "nextThoughtNeeded"},
 		},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args ThoughtData) (*mcp.CallToolResult, any, error) {
 		resp, err := thinkingServer.ProcessThought(args)

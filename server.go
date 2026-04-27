@@ -12,9 +12,9 @@ import (
 // ThoughtData represents the input for a single thinking step.
 type ThoughtData struct {
 	Thought             string  `json:"thought"`
-	ThoughtNumber       int     `json:"thoughtNumber,omitempty"`
-	TotalThoughts       int     `json:"totalThoughts,omitempty"`
-	NextThoughtNeeded   *bool   `json:"nextThoughtNeeded,omitempty"`
+	ThoughtNumber       int     `json:"thoughtNumber"`
+	TotalThoughts       int     `json:"totalThoughts"`
+	NextThoughtNeeded   bool    `json:"nextThoughtNeeded"`
 	IsRevision          *bool   `json:"isRevision,omitempty"`
 	RevisesThought      *int    `json:"revisesThought,omitempty"`
 	BranchFromThought   *int    `json:"branchFromThought,omitempty"`
@@ -162,7 +162,7 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 			// Also reset if the last thought was finished, but only if we are not in gather phase
 			if !shouldReset && input.Phase != "gather" {
 				lastThought := s.thoughtHistory[len(s.thoughtHistory)-1]
-				if lastThought.NextThoughtNeeded != nil && !*lastThought.NextThoughtNeeded {
+				if !lastThought.NextThoughtNeeded {
 					shouldReset = true
 				}
 			}
@@ -211,7 +211,7 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 
 	// Cleanup shared memory if the task is done (NextThoughtNeeded is false)
 	// Only clear if we are in the 'test' phase or if no phase was specified (standard mode)
-	if input.NextThoughtNeeded != nil && !*input.NextThoughtNeeded {
+	if !input.NextThoughtNeeded {
 		if input.Phase == "test" || !phaseProvided {
 			fmt.Fprint(os.Stderr, color.GreenString("✅ Task completed. Cleaning up shared memory...\n"))
 			s.shm.ClearAll()
@@ -223,15 +223,10 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 		branches = append(branches, k)
 	}
 
-	nextNeeded := true
-	if input.NextThoughtNeeded != nil {
-		nextNeeded = *input.NextThoughtNeeded
-	}
-
 	resp := ThoughtResponse{
 		ThoughtNumber:        input.ThoughtNumber,
 		TotalThoughts:        input.TotalThoughts,
-		NextThoughtNeeded:    nextNeeded,
+		NextThoughtNeeded:    input.NextThoughtNeeded,
 		Branches:             branches,
 		ThoughtHistoryLength: len(s.thoughtHistory),
 		Phase:                input.Phase,
