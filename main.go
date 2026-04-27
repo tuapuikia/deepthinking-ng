@@ -51,6 +51,65 @@ Parameters:
 - branchFromThought: Which thought number is the branching point.
 - branchId: Identifier for the current branch.
 - needsMoreThoughts: If reaching end but realizing more thoughts needed.`,
+		InputSchema: struct {
+			Type       string         `json:"type"`
+			Properties map[string]any `json:"properties,omitempty"`
+			Required   []string       `json:"required,omitempty"`
+		}{
+			Type: "object",
+			Properties: map[string]any{
+				"thought": map[string]any{
+					"type":        "string",
+					"description": "Your current thinking step",
+				},
+				"thoughtNumber": map[string]any{
+					"type":        "integer",
+					"description": "Current number in sequence",
+				},
+				"totalThoughts": map[string]any{
+					"type":        "integer",
+					"description": "Current estimate of thoughts needed",
+				},
+				"nextThoughtNeeded": map[string]any{
+					"type":        "boolean",
+					"description": "True if you need more thinking",
+				},
+				"phase": map[string]any{
+					"type":        "string",
+					"description": "Phase of thinking (gather, process, test)",
+					"enum":        []string{"gather", "process", "test"},
+				},
+				"workerId": map[string]any{
+					"type":        "integer",
+					"description": "ID of the current worker",
+				},
+				"thinkingWorkerCount": map[string]any{
+					"type":        "integer",
+					"description": "Total number of workers for the Gather phase",
+				},
+				"isRevision": map[string]any{
+					"type":        "boolean",
+					"description": "Whether this is a revision of a previous thought",
+				},
+				"revisesThought": map[string]any{
+					"type":        "integer",
+					"description": "The thought number being revised",
+				},
+				"branchFromThought": map[string]any{
+					"type":        "integer",
+					"description": "The thought number to branch from",
+				},
+				"branchId": map[string]any{
+					"type":        "string",
+					"description": "Identifier for the current branch",
+				},
+				"needsMoreThoughts": map[string]any{
+					"type":        "boolean",
+					"description": "Whether more thoughts are needed",
+				},
+			},
+			Required: []string{"thought"},
+		},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args ThoughtData) (*mcp.CallToolResult, any, error) {
 		resp, err := thinkingServer.ProcessThought(args)
 		if err != nil {

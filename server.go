@@ -14,7 +14,7 @@ type ThoughtData struct {
 	Thought             string  `json:"thought"`
 	ThoughtNumber       int     `json:"thoughtNumber"`
 	TotalThoughts       int     `json:"totalThoughts"`
-	NextThoughtNeeded   bool    `json:"nextThoughtNeeded"`
+	NextThoughtNeeded   *bool   `json:"nextThoughtNeeded,omitempty"`
 	IsRevision          *bool   `json:"isRevision,omitempty"`
 	RevisesThought      *int    `json:"revisesThought,omitempty"`
 	BranchFromThought   *int    `json:"branchFromThought,omitempty"`
@@ -130,6 +130,16 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 		input.Phase = "gather"
 	}
 
+	// Auto-increment thought number if not provided (0)
+	if input.ThoughtNumber <= 0 {
+		input.ThoughtNumber = len(s.thoughtHistory) + 1
+	}
+
+	// Set total thoughts if not provided or less than thought number
+	if input.TotalThoughts < input.ThoughtNumber {
+		input.TotalThoughts = input.ThoughtNumber
+	}
+
 	// Auto-reset if this is the start of a new thinking session (ThoughtNumber == 1)
 	// and not a branch or revision.
 	isRevision := input.IsRevision != nil && *input.IsRevision
@@ -150,7 +160,7 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 			// Also reset if the last thought was finished
 			if !shouldReset {
 				lastThought := s.thoughtHistory[len(s.thoughtHistory)-1]
-				if !lastThought.NextThoughtNeeded {
+				if lastThought.NextThoughtNeeded != nil && !*lastThought.NextThoughtNeeded {
 					shouldReset = true
 				}
 			}
@@ -177,11 +187,6 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 		input.WorkerID = 1
 	}
 
-	// Adjust totalThoughts if thoughtNumber exceeds it
-	if input.ThoughtNumber > input.TotalThoughts {
-		input.TotalThoughts = input.ThoughtNumber
-	}
-
 	s.thoughtHistory = append(s.thoughtHistory, input)
 
 	// Save to shared memory
@@ -203,7 +208,7 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 	}
 
 	// Cleanup shared memory if the task is done (NextThoughtNeeded is false)
-	if !input.NextThoughtNeeded {
+	if input.NextThoughtNeeded != nil && !*input.NextThoughtNeeded {
 		fmt.Fprint(os.Stderr, color.GreenString("✅ Task completed. Cleaning up shared memory...\n"))
 		s.shm.ClearAll()
 	}
@@ -213,10 +218,15 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 		branches = append(branches, k)
 	}
 
+	nextNeeded := true
+	if input.NextThoughtNeeded != nil {
+		nextNeeded = *input.NextThoughtNeeded
+	}
+
 	resp := ThoughtResponse{
 		ThoughtNumber:        input.ThoughtNumber,
 		TotalThoughts:        input.TotalThoughts,
-		NextThoughtNeeded:    input.NextThoughtNeeded,
+		NextThoughtNeeded:    nextNeeded,
 		Branches:             branches,
 		ThoughtHistoryLength: len(s.thoughtHistory),
 		Phase:                input.Phase,
