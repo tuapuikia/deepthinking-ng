@@ -56,7 +56,7 @@ type SequentialThinkingServer struct {
 func NewSequentialThinkingServer() *SequentialThinkingServer {
 	disableLogging := strings.ToLower(os.Getenv("DISABLE_THOUGHT_LOGGING")) == "true"
 	
-	workerCount := 3
+	workerCount := 5
 	if val := os.Getenv("THINKING_WORKER_COUNT"); val != "" {
 		fmt.Sscanf(val, "%d", &workerCount)
 	}
@@ -129,6 +129,40 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 		input.Phase = "gather"
 	}
 
+	// Auto-reset if this is the start of a new thinking session (ThoughtNumber == 1)
+	// and not a branch or revision.
+	isRevision := input.IsRevision != nil && *input.IsRevision
+	if input.ThoughtNumber == 1 && input.BranchFromThought == nil && input.RevisesThought == nil && !isRevision {
+		shouldReset := false
+		if len(s.thoughtHistory) == 0 {
+			shouldReset = true
+		} else {
+			// Check if we already have this thought number and worker ID in history.
+			// If we do, it means this is a new session starting over.
+			for _, t := range s.thoughtHistory {
+				if t.ThoughtNumber == input.ThoughtNumber && t.WorkerID == input.WorkerID {
+					shouldReset = true
+					break
+				}
+			}
+
+			// Also reset if the last thought was finished
+			if !shouldReset {
+				lastThought := s.thoughtHistory[len(s.thoughtHistory)-1]
+				if !lastThought.NextThoughtNeeded {
+					shouldReset = true
+				}
+			}
+		}
+
+		if shouldReset {
+			fmt.Fprint(os.Stderr, color.CyanString("🧹 Auto-clearing shared memory for new thinking session...\n"))
+			s.shm.ClearAll()
+			s.thoughtHistory = make([]ThoughtData, 0)
+			s.branches = make(map[string][]ThoughtData)
+		}
+	}
+
 	// Validate phase
 	validPhases := map[string]bool{"gather": true, "process": true, "test": true}
 	if !validPhases[strings.ToLower(input.Phase)] {
@@ -165,6 +199,12 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 	if !s.disableThoughtLogging {
 		formatted := s.formatThought(input)
 		fmt.Fprintln(os.Stderr, formatted)
+	}
+
+	// Cleanup shared memory if the task is done (NextThoughtNeeded is false)
+	if !input.NextThoughtNeeded {
+		fmt.Fprint(os.Stderr, color.GreenString("✅ Task completed. Cleaning up shared memory...\n"))
+		s.shm.ClearAll()
 	}
 
 	branches := make([]string, 0, len(s.branches))
