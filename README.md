@@ -30,6 +30,25 @@ go build -o deepthinking-ng .
 ./deepthinking-ng -transport sse -port 8080
 ```
 
+### Gemini CLI Configuration
+
+Add the following to your `gemini-cli` configuration (usually in `~/.gemini/config.json`):
+
+```json
+{
+  "mcpServers": {
+    "deepthinking-ng": {
+      "command": "deepthinking-ng",
+      "args": [],
+      "env": {
+        "THINKING_WORKER_COUNT": "5",
+        "SHM_ROOT": "/dev/shm/deepthinking-ng"
+      }
+    }
+  }
+}
+```
+
 ## Configuration Options
 
 You can configure the server using environment variables:
