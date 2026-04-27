@@ -22,17 +22,23 @@ type SharedMemoryManager struct {
 }
 
 func NewSharedMemoryManager() *SharedMemoryManager {
-	// Ensure root directory exists
-	os.MkdirAll(ShmRoot, 0777)
+	// Ensure root directory exists with restrictive permissions (0700)
+	os.MkdirAll(ShmRoot, 0700)
 	return &SharedMemoryManager{}
 }
 
 func (m *SharedMemoryManager) SaveThought(phase string, workerID int, data ThoughtData) error {
+	// Validate phase to prevent path traversal
+	phase = filepath.Base(filepath.Clean(phase))
+	if phase == "." || phase == ".." || phase == "/" {
+		return fmt.Errorf("invalid phase name")
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	dir := filepath.Join(ShmRoot, phase)
-	if err := os.MkdirAll(dir, 0777); err != nil {
+	if err := os.MkdirAll(dir, 0700); err != nil {
 		return fmt.Errorf("failed to create shm dir: %w", err)
 	}
 
@@ -44,7 +50,8 @@ func (m *SharedMemoryManager) SaveThought(phase string, workerID int, data Thoug
 		return fmt.Errorf("failed to marshal thought: %w", err)
 	}
 
-	if err := os.WriteFile(path, bytes, 0666); err != nil {
+	// Use restrictive permissions (0600)
+	if err := os.WriteFile(path, bytes, 0600); err != nil {
 		return fmt.Errorf("failed to write to shm: %w", err)
 	}
 
@@ -52,6 +59,12 @@ func (m *SharedMemoryManager) SaveThought(phase string, workerID int, data Thoug
 }
 
 func (m *SharedMemoryManager) GetPhaseThoughts(phase string) ([]ThoughtData, error) {
+	// Validate phase to prevent path traversal
+	phase = filepath.Base(filepath.Clean(phase))
+	if phase == "." || phase == ".." || phase == "/" {
+		return nil, fmt.Errorf("invalid phase name")
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

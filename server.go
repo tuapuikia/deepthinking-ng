@@ -128,6 +128,13 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 	if input.Phase == "" {
 		input.Phase = "gather"
 	}
+
+	// Validate phase
+	validPhases := map[string]bool{"gather": true, "process": true, "test": true}
+	if !validPhases[strings.ToLower(input.Phase)] {
+		return ThoughtResponse{}, fmt.Errorf("invalid phase: %s. Must be 'gather', 'process', or 'test'", input.Phase)
+	}
+
 	if input.ThinkingWorkerCount == 0 {
 		input.ThinkingWorkerCount = s.defaultWorkerCount
 	}
