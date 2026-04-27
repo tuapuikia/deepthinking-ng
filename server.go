@@ -12,8 +12,8 @@ import (
 // ThoughtData represents the input for a single thinking step.
 type ThoughtData struct {
 	Thought             string  `json:"thought"`
-	ThoughtNumber       int     `json:"thoughtNumber"`
-	TotalThoughts       int     `json:"totalThoughts"`
+	ThoughtNumber       int     `json:"thoughtNumber,omitempty"`
+	TotalThoughts       int     `json:"totalThoughts,omitempty"`
 	NextThoughtNeeded   *bool   `json:"nextThoughtNeeded,omitempty"`
 	IsRevision          *bool   `json:"isRevision,omitempty"`
 	RevisesThought      *int    `json:"revisesThought,omitempty"`
@@ -125,6 +125,8 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	phaseProvided := input.Phase != ""
+
 	// Set defaults
 	if input.Phase == "" {
 		input.Phase = "gather"
@@ -157,8 +159,8 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 				}
 			}
 
-			// Also reset if the last thought was finished
-			if !shouldReset {
+			// Also reset if the last thought was finished, but only if we are not in gather phase
+			if !shouldReset && input.Phase != "gather" {
 				lastThought := s.thoughtHistory[len(s.thoughtHistory)-1]
 				if lastThought.NextThoughtNeeded != nil && !*lastThought.NextThoughtNeeded {
 					shouldReset = true
@@ -208,9 +210,12 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 	}
 
 	// Cleanup shared memory if the task is done (NextThoughtNeeded is false)
+	// Only clear if we are in the 'test' phase or if no phase was specified (standard mode)
 	if input.NextThoughtNeeded != nil && !*input.NextThoughtNeeded {
-		fmt.Fprint(os.Stderr, color.GreenString("✅ Task completed. Cleaning up shared memory...\n"))
-		s.shm.ClearAll()
+		if input.Phase == "test" || !phaseProvided {
+			fmt.Fprint(os.Stderr, color.GreenString("✅ Task completed. Cleaning up shared memory...\n"))
+			s.shm.ClearAll()
+		}
 	}
 
 	branches := make([]string, 0, len(s.branches))

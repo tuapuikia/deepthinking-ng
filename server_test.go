@@ -87,6 +87,47 @@ func TestSequentialThinking(t *testing.T) {
 		}
 	})
 
+	t.Run("Gather Phase Workflow - 5 Workers", func(t *testing.T) {
+		// Reset for clean test
+		server.shm.ClearAll()
+		server.thoughtHistory = nil
+		
+		workerCount := 5
+		server.defaultWorkerCount = workerCount
+		nextNeeded := false // Test with false to ensure fix works
+
+		for i := 1; i <= workerCount; i++ {
+			args := ThoughtData{
+				Thought:             "Gathering info",
+				Phase:               "gather",
+				WorkerID:            i,
+				ThinkingWorkerCount: workerCount,
+				NextThoughtNeeded:   &nextNeeded,
+			}
+			resp, err := server.ProcessThought(args)
+			if err != nil {
+				t.Fatalf("Worker %d failed: %v", i, err)
+			}
+
+			if i < workerCount {
+				expectedPrefix := "waiting_for_workers"
+				if len(resp.Status) < len(expectedPrefix) || resp.Status[:len(expectedPrefix)] != expectedPrefix {
+					t.Errorf("Unexpected status for worker %d: %s", i, resp.Status)
+				}
+			} else {
+				if resp.Status != "all_workers_finished" {
+					t.Errorf("Expected all_workers_finished, got %s", resp.Status)
+				}
+				if len(resp.AllWorkerThoughts) != 5 {
+					t.Errorf("Expected 5 worker thoughts, got %d", len(resp.AllWorkerThoughts))
+				}
+				if resp.SuperIdea == "" {
+					t.Error("Expected SuperIdea to be generated")
+				}
+			}
+		}
+	})
+
 	t.Run("Completion and Cleanup", func(t *testing.T) {
 		nextNeeded := false
 		args := ThoughtData{
