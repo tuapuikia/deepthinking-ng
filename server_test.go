@@ -1,11 +1,16 @@
 package main
 
 import (
+	"fmt"
+
+	"os"
+
 	"testing"
 )
 
 func TestSequentialThinking(t *testing.T) {
 	server := NewSequentialThinkingServer()
+	defer os.RemoveAll(server.shm.shmPath)
 	// Ensure we start fresh
 	server.shm.ClearAll()
 
@@ -54,7 +59,7 @@ func TestSequentialThinking(t *testing.T) {
 		// Reset for clean test
 		server.shm.ClearAll()
 		server.thoughtHistory = nil
-		
+
 		workerCount := 3
 		server.defaultWorkerCount = workerCount
 		nextNeeded := true
@@ -91,7 +96,7 @@ func TestSequentialThinking(t *testing.T) {
 		// Reset for clean test
 		server.shm.ClearAll()
 		server.thoughtHistory = nil
-		
+
 		workerCount := 5
 		server.defaultWorkerCount = workerCount
 		nextNeeded := false // Test with false to ensure fix works
@@ -167,10 +172,10 @@ func TestSequentialThinking(t *testing.T) {
 
 		// 4. Try test without process -> should fail
 		argsTest := ThoughtData{
-			Thought:             "Testing",
-			Phase:               "test",
-			WorkerID:            1,
-			NextThoughtNeeded:   nextNeeded,
+			Thought:           "Testing",
+			Phase:             "test",
+			WorkerID:          1,
+			NextThoughtNeeded: nextNeeded,
 		}
 		_, err = server.ProcessThought(argsTest)
 		if err == nil {
@@ -218,6 +223,7 @@ func TestSequentialThinking(t *testing.T) {
 
 func TestResetThinking(t *testing.T) {
 	server := NewSequentialThinkingServer()
+	defer os.RemoveAll(server.shm.shmPath)
 	nextNeeded := true
 	server.ProcessThought(ThoughtData{Thought: "Test", NextThoughtNeeded: nextNeeded})
 
@@ -232,5 +238,191 @@ func TestResetThinking(t *testing.T) {
 
 	if len(server.thoughtHistory) != 0 {
 		t.Error("History not cleared")
+	}
+}
+
+func TestMultipleThoughtsPerWorker(t *testing.T) {
+	server := NewSequentialThinkingServer()
+	defer os.RemoveAll(server.shm.shmPath)
+	server.shm.ClearAll()
+	server.thoughtHistory = nil
+
+	workerCount := 1
+	server.defaultWorkerCount = workerCount
+	nextNeeded := true
+
+	// Worker 1 submits first thought
+	args1 := ThoughtData{
+		Thought:             "Worker 1 first thought",
+		Phase:               "gather",
+		WorkerID:            1,
+		ThinkingWorkerCount: workerCount,
+		NextThoughtNeeded:   nextNeeded,
+	}
+	server.ProcessThought(args1)
+
+	// Worker 1 submits second thought (e.g. they realized they needed to add more)
+	args2 := ThoughtData{
+		Thought:             "Worker 1 second thought",
+		Phase:               "gather",
+		WorkerID:            1,
+		ThinkingWorkerCount: workerCount,
+		NextThoughtNeeded:   nextNeeded,
+	}
+	server.ProcessThought(args2)
+
+	// Worker 1 submits third thought
+	args3 := ThoughtData{
+		Thought:             "Worker 1 third thought",
+		Phase:               "gather",
+		WorkerID:            1,
+		ThinkingWorkerCount: workerCount,
+		NextThoughtNeeded:   nextNeeded,
+	}
+	resp, err := server.ProcessThought(args3)
+	
+	if err != nil {
+		t.Fatalf("ProcessThought failed: %v", err)
+	}
+
+	// Because worker count is 1, it should immediately process all 3 thoughts from Worker 1
+	if len(resp.AllWorkerThoughts) != 3 {
+		t.Errorf("Expected 3 thoughts in AllWorkerThoughts, got %d", len(resp.AllWorkerThoughts))
+	}
+	
+	// Check that we can read them back out from SHM and confirm there are 3 separate files
+	thoughts, _ := server.shm.GetPhaseThoughts("gather")
+	if len(thoughts) != 3 {
+		t.Errorf("Expected 3 thoughts physically saved in SHM, got %d", len(thoughts))
+	}
+}
+
+func TestProcessPhaseTransition(t *testing.T) {
+	server := NewSequentialThinkingServer()
+	defer os.RemoveAll(server.shm.shmPath)
+	server.shm.ClearAll()
+	server.thoughtHistory = nil
+
+	workerCount := 2
+	server.defaultWorkerCount = workerCount
+	nextNeeded := true
+
+	// 1. Gather Phase - Worker 1
+	server.ProcessThought(ThoughtData{
+		Thought:             "Worker 1 idea",
+		Phase:               "gather",
+		WorkerID:            1,
+		ThinkingWorkerCount: workerCount,
+		NextThoughtNeeded:   nextNeeded,
+	})
+
+	// Gather Phase - Worker 2
+	server.ProcessThought(ThoughtData{
+		Thought:             "Worker 2 idea",
+		Phase:               "gather",
+		WorkerID:            2,
+		ThinkingWorkerCount: workerCount,
+		NextThoughtNeeded:   nextNeeded,
+	})
+
+	// Verify gather phase files exist
+	gatherThoughts, _ := server.shm.GetPhaseThoughts("gather")
+	if len(gatherThoughts) != 2 {
+		t.Fatalf("Expected 2 gather thoughts, got %d", len(gatherThoughts))
+	}
+
+	// 2. Process Phase Transition
+	processArgs := ThoughtData{
+		Thought:             "Synthesizing gathered ideas",
+		Phase:               "process",
+		WorkerID:            1,
+		ThinkingWorkerCount: workerCount,
+		NextThoughtNeeded:   nextNeeded,
+	}
+	
+	_, err := server.ProcessThought(processArgs)
+	if err != nil {
+		t.Fatalf("Process phase failed: %v", err)
+	}
+
+	// 3. Verify gather phase is cleared
+	gatherThoughtsAfter, _ := server.shm.GetPhaseThoughts("gather")
+	if len(gatherThoughtsAfter) != 0 {
+		t.Errorf("Expected gather thoughts to be cleared when entering process phase, but found %d", len(gatherThoughtsAfter))
+	}
+
+	// 4. Verify process phase files exist
+	processThoughts, _ := server.shm.GetPhaseThoughts("process")
+	if len(processThoughts) != 1 {
+		t.Errorf("Expected 1 process thought, got %d", len(processThoughts))
+	}
+}
+
+func TestMCPSessionConsistency(t *testing.T) {
+	// This simulates exactly how main.go initializes the server once at boot
+	server := NewSequentialThinkingServer()
+	server.shm.ClearAll()
+	server.thoughtHistory = nil
+
+	workerCount := 3
+	server.defaultWorkerCount = workerCount
+	nextNeeded := true
+
+	// Capture the Session ID from the first worker's response
+	var sessionID string
+
+	// Phase 1: Gather (3 Workers)
+	for i := 1; i <= 3; i++ {
+		resp, err := server.ProcessThought(ThoughtData{
+			Thought:             fmt.Sprintf("Worker %d gather thought", i),
+			Phase:               "gather",
+			WorkerID:            i,
+			ThinkingWorkerCount: workerCount,
+			NextThoughtNeeded:   nextNeeded,
+		})
+		
+		if err != nil {
+			t.Fatalf("Failed on worker %d: %v", i, err)
+		}
+
+		if i == 1 {
+			sessionID = resp.SessionID
+		} else if resp.SessionID != sessionID {
+			t.Fatalf("Session ID mismatch in gather phase! Expected %s, got %s", sessionID, resp.SessionID)
+		}
+	}
+
+	// Phase 2: Process
+	respProcess, err := server.ProcessThought(ThoughtData{
+		Thought:             "Processing",
+		Phase:               "process",
+		WorkerID:            1,
+		ThinkingWorkerCount: workerCount,
+		NextThoughtNeeded:   nextNeeded,
+	})
+
+	if err != nil {
+		t.Fatalf("Failed on process phase: %v", err)
+	}
+
+	if respProcess.SessionID != sessionID {
+		t.Fatalf("Session ID mismatch in process phase! Expected %s, got %s", sessionID, respProcess.SessionID)
+	}
+
+	// Phase 3: Test
+	respTest, err := server.ProcessThought(ThoughtData{
+		Thought:             "Testing",
+		Phase:               "test",
+		WorkerID:            1,
+		ThinkingWorkerCount: workerCount,
+		NextThoughtNeeded:   false, // Finish the task to trigger cleanup
+	})
+
+	if err != nil {
+		t.Fatalf("Failed on test phase: %v", err)
+	}
+
+	if respTest.SessionID != sessionID {
+		t.Fatalf("Session ID mismatch in test phase! Expected %s, got %s", sessionID, respTest.SessionID)
 	}
 }

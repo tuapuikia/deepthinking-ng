@@ -11,20 +11,20 @@ import (
 
 // ThoughtData represents the input for a single thinking step.
 type ThoughtData struct {
-	Thought             string  `json:"thought"`
-	ThoughtNumber       int     `json:"thoughtNumber"`
-	TotalThoughts       int     `json:"totalThoughts"`
-	NextThoughtNeeded   bool    `json:"nextThoughtNeeded"`
-	IsRevision          *bool   `json:"isRevision,omitempty"`
-	RevisesThought      *int    `json:"revisesThought,omitempty"`
-	BranchFromThought   *int    `json:"branchFromThought,omitempty"`
-	BranchID            *string `json:"branchId,omitempty"`
-	NeedsMoreThoughts   *bool   `json:"needsMoreThoughts,omitempty"`
-	
+	Thought           string  `json:"thought"`
+	ThoughtNumber     int     `json:"thoughtNumber"`
+	TotalThoughts     int     `json:"totalThoughts"`
+	NextThoughtNeeded bool    `json:"nextThoughtNeeded"`
+	IsRevision        *bool   `json:"isRevision,omitempty"`
+	RevisesThought    *int    `json:"revisesThought,omitempty"`
+	BranchFromThought *int    `json:"branchFromThought,omitempty"`
+	BranchID          *string `json:"branchId,omitempty"`
+	NeedsMoreThoughts *bool   `json:"needsMoreThoughts,omitempty"`
+
 	// GPT Workflow fields
-	Phase               string  `json:"phase,omitempty"`               // "gather", "process", "test"
-	WorkerID            int     `json:"workerId,omitempty"`            // 1, 2, 3...
-	ThinkingWorkerCount int     `json:"thinkingWorkerCount,omitempty"` // default 5
+	Phase               string `json:"phase,omitempty"`               // "gather", "process", "test"
+	WorkerID            int    `json:"workerId,omitempty"`            // 1, 2, 3...
+	ThinkingWorkerCount int    `json:"thinkingWorkerCount,omitempty"` // default 5
 }
 
 // ThoughtResponse represents the structured output of a thinking step.
@@ -35,12 +35,12 @@ type ThoughtResponse struct {
 	Branches             []string `json:"branches"`
 	ThoughtHistoryLength int      `json:"thoughtHistoryLength"`
 	SessionID            string   `json:"sessionId"`
-	
+
 	// GPT Workflow response fields
-	Phase                string   `json:"phase,omitempty"`
-	Status               string   `json:"status,omitempty"`
-	AllWorkerThoughts    []string `json:"allWorkerThoughts,omitempty"`
-	SuperIdea            string   `json:"superIdea,omitempty"`
+	Phase             string   `json:"phase,omitempty"`
+	Status            string   `json:"status,omitempty"`
+	AllWorkerThoughts []string `json:"allWorkerThoughts,omitempty"`
+	SuperIdea         string   `json:"superIdea,omitempty"`
 }
 
 // SequentialThinkingServer manages the state of the thinking process.
@@ -56,7 +56,7 @@ type SequentialThinkingServer struct {
 // NewSequentialThinkingServer creates a new instance of the server.
 func NewSequentialThinkingServer() *SequentialThinkingServer {
 	disableLogging := strings.ToLower(os.Getenv("DISABLE_THOUGHT_LOGGING")) == "true"
-	
+
 	workerCount := 5
 	if val := os.Getenv("THINKING_WORKER_COUNT"); val != "" {
 		fmt.Sscanf(val, "%d", &workerCount)
@@ -98,15 +98,15 @@ func (s *SequentialThinkingServer) formatThought(data ThoughtData) string {
 	}
 
 	header := fmt.Sprintf("%s %s %d/%d%s", prefix, phaseInfo, data.ThoughtNumber, data.TotalThoughts, context)
-	
+
 	visibleHeaderLen := len(fmt.Sprintf("Thought %s %d/%d%s", phaseInfo, data.ThoughtNumber, data.TotalThoughts, context)) + 3
-	
+
 	contentLen := len(data.Thought)
 	maxLen := visibleHeaderLen
 	if contentLen > maxLen {
 		maxLen = contentLen
 	}
-	
+
 	border := strings.Repeat("─", maxLen+4)
 
 	var sb strings.Builder
@@ -196,6 +196,8 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 		if len(gatherThoughts) < input.ThinkingWorkerCount {
 			return ThoughtResponse{}, fmt.Errorf("STRICT WORKFLOW VIOLATION: Cannot enter 'process' phase. 'gather' phase is incomplete. You must gather perspectives from %d workers (currently have %d). Use phase='gather' with different workerIds", input.ThinkingWorkerCount, len(gatherThoughts))
 		}
+		// Combine thoughts and clear gather phase to prevent reuse
+		s.shm.ClearPhase("gather")
 	} else if input.Phase == "test" {
 		processThoughts, _ := s.shm.GetPhaseThoughts("process")
 		if len(processThoughts) == 0 {
@@ -274,19 +276,19 @@ func (s *SequentialThinkingServer) synthesizeSuperIdea(thoughts []ThoughtData) s
 	sb.WriteString("🚀 SUPER IDEA SYNTHESIS\n")
 	sb.WriteString("=======================\n\n")
 	sb.WriteString("The following perspectives have been gathered and analyzed:\n\n")
-	
+
 	for _, t := range thoughts {
 		sb.WriteString(fmt.Sprintf("📍 Worker %d Perspective:\n", t.WorkerID))
 		sb.WriteString(fmt.Sprintf("   \"%s\"\n\n", t.Thought))
 	}
-	
+
 	sb.WriteString("🎯 INTEGRATED STRATEGY:\n")
 	sb.WriteString("----------------------\n")
 	sb.WriteString("1. Evaluate the unique strengths and potential pitfalls identified in each perspective.\n")
 	sb.WriteString("2. Synthesize a unified approach that incorporates the best elements of all proposals.\n")
 	sb.WriteString("3. Address any contradictions or trade-offs identified during the gather phase.\n\n")
-	
+
 	sb.WriteString("➡️ NEXT STEP: Proceed to the 'PROCESS' phase to implement this integrated strategy.")
-	
+
 	return sb.String()
 }

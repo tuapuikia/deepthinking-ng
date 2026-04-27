@@ -1,7 +1,7 @@
 .PHONY: build run-stdio run-sse docker-build test clean
 
 build:
-	go build -o deepthinking-ng .
+	CGO_ENABLED=0 go build -o deepthinking-ng .
 
 test:
 	go test -v ./...

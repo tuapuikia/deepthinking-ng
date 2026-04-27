@@ -144,7 +144,7 @@ Parameters:
 				},
 			}, nil, nil
 		}
-		
+
 		// Also reset in-memory state
 		thinkingServer.mu.Lock()
 		thinkingServer.thoughtHistory = make([]ThoughtData, 0)

@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -39,14 +40,14 @@ func NewSharedMemoryManager() *SharedMemoryManager {
 	if sessionID == "" {
 		sessionID = generateSessionID()
 	}
-	
+
 	shmPath := filepath.Join(ShmBase, sessionID)
-	
+
 	// Ensure root directory exists with restrictive permissions (0700)
 	os.MkdirAll(shmPath, 0700)
 	fmt.Fprintf(os.Stderr, "Shared memory initialized with random session ID: %s\n", sessionID)
 	fmt.Fprintf(os.Stderr, "Path: %s\n", shmPath)
-	
+
 	return &SharedMemoryManager{
 		sessionID: sessionID,
 		shmPath:   shmPath,
@@ -72,7 +73,9 @@ func (m *SharedMemoryManager) SaveThought(phase string, workerID int, data Thoug
 		return fmt.Errorf("failed to create shm dir: %w", err)
 	}
 
-	filename := fmt.Sprintf("worker_%d.json", workerID)
+	hashBytes := sha256.Sum256([]byte(data.Thought))
+	hashStr := hex.EncodeToString(hashBytes[:])[:8]
+	filename := fmt.Sprintf("worker_%d_%s_%d.json", workerID, hashStr, data.ThoughtNumber)
 	path := filepath.Join(dir, filename)
 
 	bytes, err := json.Marshal(data)
@@ -147,4 +150,17 @@ func (m *SharedMemoryManager) ClearAll() error {
 		}
 	}
 	return nil
+}
+
+func (m *SharedMemoryManager) ClearPhase(phase string) error {
+	phase = filepath.Base(filepath.Clean(phase))
+	if phase == "." || phase == ".." || phase == "/" {
+		return fmt.Errorf("invalid phase name")
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	dir := filepath.Join(m.shmPath, phase)
+	return os.RemoveAll(dir)
 }
