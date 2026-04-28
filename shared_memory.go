@@ -11,8 +11,6 @@ import (
 	"sync"
 )
 
-var ShmBase = getEnv("SHM_ROOT", "/dev/shm/deepthinking-ng")
-
 func getEnv(key, fallback string) string {
 	if value, ok := os.LookupEnv(key); ok {
 		return value
@@ -35,13 +33,17 @@ type SharedMemoryManager struct {
 	shmPath   string
 }
 
-func NewSharedMemoryManager() *SharedMemoryManager {
+func NewSharedMemoryManager(shmRoot string) *SharedMemoryManager {
 	sessionID := getEnv("GEMINI_SESSION_ID", "")
 	if sessionID == "" {
 		sessionID = generateSessionID()
 	}
 
-	shmPath := filepath.Join(ShmBase, sessionID)
+	if shmRoot == "" {
+		shmRoot = getEnv("SHM_ROOT", "/dev/shm/deepthinking-ng")
+	}
+
+	shmPath := filepath.Join(shmRoot, sessionID)
 
 	// Ensure root directory exists with restrictive permissions (0700)
 	os.MkdirAll(shmPath, 0700)

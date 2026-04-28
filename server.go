@@ -54,12 +54,14 @@ type SequentialThinkingServer struct {
 }
 
 // NewSequentialThinkingServer creates a new instance of the server.
-func NewSequentialThinkingServer() *SequentialThinkingServer {
+func NewSequentialThinkingServer(workerCount int, shmRoot string) *SequentialThinkingServer {
 	disableLogging := strings.ToLower(os.Getenv("DISABLE_THOUGHT_LOGGING")) == "true"
 
-	workerCount := 5
-	if val := os.Getenv("THINKING_WORKER_COUNT"); val != "" {
-		fmt.Sscanf(val, "%d", &workerCount)
+	if workerCount <= 0 {
+		workerCount = 5
+		if val := os.Getenv("THINKING_WORKER_COUNT"); val != "" {
+			fmt.Sscanf(val, "%d", &workerCount)
+		}
 	}
 
 	return &SequentialThinkingServer{
@@ -67,7 +69,7 @@ func NewSequentialThinkingServer() *SequentialThinkingServer {
 		branches:              make(map[string][]ThoughtData),
 		disableThoughtLogging: disableLogging,
 		defaultWorkerCount:    workerCount,
-		shm:                   NewSharedMemoryManager(),
+		shm:                   NewSharedMemoryManager(shmRoot),
 	}
 }
 
