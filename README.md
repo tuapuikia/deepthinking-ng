@@ -1,6 +1,6 @@
 # DeepThinking-NG MCP
 
-A high-performance Sequential Thinking MCP server with **GPT (Gather, Process, Test)** workflow and **Linux Shared Memory** support.
+A high-performance Sequential Thinking MCP server with **GPT (Gather, Process, Test)** workflow, **Thinking Tracks**, and **Linux Shared Memory** support.
 
 ## Features
 
@@ -8,6 +8,11 @@ A high-performance Sequential Thinking MCP server with **GPT (Gather, Process, T
   - **Gather (G)**: Multiple workers (default 5) generate diverse solutions.
   - **Process (P)**: A single worker implements the chosen solution.
   - **Test (T)**: A single worker verifies the result.
+- **Thinking Tracks**: Specialized modes that provide tailored guidance for different engineering tasks:
+  - `bug-fix`: Focuses on root cause isolation and regression prevention.
+  - `feature`: Focuses on scalability and architectural alignment.
+  - `security`: Focuses on threat modeling and defense-in-depth.
+- **LLM-Powered Synthesis**: Dynamically synthesizes multiple worker perspectives into a single, high-fidelity "Super Idea" using track-specific strategic prompts.
 - **Shared Memory**: Uses `/dev/shm` to share thoughts between workers in the Gather phase, enabling the synthesis of a "Super Idea".
 - **Dynamic Thinking**: Adjust total thoughts, branch, and revise as understanding deepens.
 - **Interactive Logging**: Beautifully formatted console output with phase and worker identification.
@@ -87,6 +92,7 @@ The primary tool for the thinking process.
 - `revisesThought` (int): The thought number being revised.
 - `branchFromThought` (int): The thought number to branch from.
 - `branchId` (string): Unique ID for the branch.
+- `track` (string): The thinking track to use (`bug-fix`, `feature`, `security`).
 
 ### `reset_thinking`
 Resets the thinking session and clears all shared memory in `/dev/shm`.
@@ -94,15 +100,15 @@ Resets the thinking session and clears all shared memory in `/dev/shm`.
 ## GPT Workflow Example
 
 1. **Gather Phase**:
-   - Worker 1: `{"thought": "Solution A...", "phase": "gather", "workerId": 1}`
-   - Worker 2: `{"thought": "Solution B...", "phase": "gather", "workerId": 2}`
-   - Worker 3: `{"thought": "Solution C...", "phase": "gather", "workerId": 3}`
-   - Worker 4: `{"thought": "Solution D...", "phase": "gather", "workerId": 4}`
-   - Worker 5: `{"thought": "Solution E...", "phase": "gather", "workerId": 5}`
-   - *Result*: The tool returns all 5 solutions and a synthesized **Super Idea**.
+   - Worker 1: `{"thought": "Solution A...", "phase": "gather", "workerId": 1, "track": "bug-fix"}`
+   - Worker 2: `{"thought": "Solution B...", "phase": "gather", "workerId": 2, "track": "bug-fix"}`
+   - Worker 3: `{"thought": "Solution C...", "phase": "gather", "workerId": 3, "track": "bug-fix"}`
+   - Worker 4: `{"thought": "Solution D...", "phase": "gather", "workerId": 4, "track": "bug-fix"}`
+   - Worker 5: `{"thought": "Solution E...", "phase": "gather", "workerId": 5, "track": "bug-fix"}`
+   - *Result*: The tool returns all 5 solutions and a synthesized **Super Idea** with track-specific guidance.
 
 2. **Process Phase**:
-   - Worker 1: `{"thought": "Implementing Super Idea...", "phase": "process", "workerId": 1}`
+   - Worker 1: `{"thought": "Implementing synthesized strategy...", "phase": "process", "workerId": 1}`
 
 3. **Test Phase**:
    - Worker 1: `{"thought": "Verifying implementation...", "phase": "test", "workerId": 1}`

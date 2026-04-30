@@ -25,6 +25,7 @@ type ThoughtData struct {
 	Phase               string `json:"phase,omitempty"`               // "gather", "process", "test"
 	WorkerID            int    `json:"workerId,omitempty"`            // 1, 2, 3...
 	ThinkingWorkerCount int    `json:"thinkingWorkerCount,omitempty"` // default 5
+	Track               string `json:"track,omitempty"`               // "bug-fix", "feature", "security", etc.
 }
 
 // ThoughtResponse represents the structured output of a thinking step.
@@ -41,6 +42,7 @@ type ThoughtResponse struct {
 	Status            string   `json:"status,omitempty"`
 	AllWorkerThoughts []string `json:"allWorkerThoughts,omitempty"`
 	SuperIdea         string   `json:"superIdea,omitempty"`
+	Track             string   `json:"track,omitempty"`
 }
 
 // SequentialThinkingServer manages the state of the thinking process.
@@ -248,6 +250,7 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 		ThoughtHistoryLength: len(s.thoughtHistory),
 		Phase:                input.Phase,
 		SessionID:            s.shm.GetSessionID(),
+		Track:                input.Track,
 	}
 
 	// GPT Workflow Logic
@@ -260,7 +263,7 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 				allThoughts = append(allThoughts, fmt.Sprintf("Worker %d: %s", t.WorkerID, t.Thought))
 			}
 			resp.AllWorkerThoughts = allThoughts
-			resp.SuperIdea = s.synthesizeSuperIdea(thoughts)
+			resp.SuperIdea = s.synthesizeSuperIdea(thoughts, input.Track)
 		} else {
 			resp.Status = fmt.Sprintf("waiting_for_workers (%d/%d)", len(thoughts), input.ThinkingWorkerCount)
 		}
@@ -271,24 +274,39 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 	return resp, nil
 }
 
-func (s *SequentialThinkingServer) synthesizeSuperIdea(thoughts []ThoughtData) string {
+func (s *SequentialThinkingServer) synthesizeSuperIdea(thoughts []ThoughtData, track string) string {
 	var sb strings.Builder
 	sb.WriteString("🚀 SUPER IDEA SYNTHESIS\n")
 	sb.WriteString("=======================\n\n")
-	sb.WriteString("The following perspectives have been gathered and analyzed:\n\n")
+
+	if track != "" {
+		sb.WriteString(fmt.Sprintf("🛤️ TRACK: %s\n\n", strings.ToUpper(track)))
+	}
+
+	sb.WriteString("The following perspectives have been gathered and analyzed from multiple thinking workers:\n\n")
 
 	for _, t := range thoughts {
 		sb.WriteString(fmt.Sprintf("📍 Worker %d Perspective:\n", t.WorkerID))
 		sb.WriteString(fmt.Sprintf("   \"%s\"\n\n", t.Thought))
 	}
 
-	sb.WriteString("🎯 INTEGRATED STRATEGY:\n")
-	sb.WriteString("----------------------\n")
-	sb.WriteString("1. Evaluate the unique strengths and potential pitfalls identified in each perspective.\n")
-	sb.WriteString("2. Synthesize a unified approach that incorporates the best elements of all proposals.\n")
-	sb.WriteString("3. Address any contradictions or trade-offs identified during the gather phase.\n\n")
+	sb.WriteString("🎯 LLM ACTION REQUIRED: INTEGRATED STRATEGY SYNTHESIS\n")
+	sb.WriteString("----------------------------------------------------\n")
+	sb.WriteString("You are now acting as the 'Strategic Orchestrator'. Your task is to analyze the diverse perspectives above and synthesize them into a single, high-fidelity integrated strategy. ")
 
-	sb.WriteString("➡️ NEXT STEP: Proceed to the 'PROCESS' phase to implement this integrated strategy.")
+	switch strings.ToLower(track) {
+	case "bug-fix":
+		sb.WriteString("As this is a 'BUG-FIX' track, prioritize root cause isolation, regression prevention, and ensuring minimal side effects on the existing codebase.")
+	case "feature":
+		sb.WriteString("As this is a 'FEATURE' track, prioritize scalability, optimal user experience, and alignment with the existing architectural patterns.")
+	case "security":
+		sb.WriteString("As this is a 'SECURITY' track, prioritize threat modeling, attack surface reduction, and the principle of defense-in-depth.")
+	default:
+		sb.WriteString("Synthesize a unified approach that incorporates the unique strengths of each proposal while resolving any contradictions or trade-offs identified.")
+	}
+
+	sb.WriteString("\n\nYour synthesis should be comprehensive and provide a clear path forward for the 'PROCESS' phase.")
+	sb.WriteString("\n\n➡️ NEXT STEP: Proceed to the 'PROCESS' phase to implement your synthesized strategy.")
 
 	return sb.String()
 }

@@ -107,6 +107,11 @@ Parameters:
 					"type":        "boolean",
 					"description": "Whether more thoughts are needed",
 				},
+				"track": map[string]any{
+					"type":        "string",
+					"description": "The thinking track to use (e.g., 'bug-fix', 'feature', 'security')",
+					"enum":        []string{"bug-fix", "feature", "security"},
+				},
 			},
 			Required: []string{"thought", "thoughtNumber", "totalThoughts", "nextThoughtNeeded"},
 		},
