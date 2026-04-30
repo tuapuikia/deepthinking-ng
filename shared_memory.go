@@ -37,11 +37,18 @@ func NewSharedMemoryManager(shmRoot string) *SharedMemoryManager {
 	sessionID := getEnv("GEMINI_SESSION_ID", "")
 	if sessionID == "" {
 		sessionID = generateSessionID()
+	} else {
+		// Sanitize user-provided session ID to prevent path traversal
+		sessionID = filepath.Base(filepath.Clean(sessionID))
+		if sessionID == "." || sessionID == ".." || sessionID == "/" {
+			sessionID = generateSessionID()
+		}
 	}
 
 	if shmRoot == "" {
 		shmRoot = getEnv("SHM_ROOT", "/dev/shm/deepthinking-ng")
 	}
+	shmRoot = filepath.Clean(shmRoot)
 
 	shmPath := filepath.Join(shmRoot, sessionID)
 

@@ -14,6 +14,7 @@ import (
 
 func main() {
 	transportType := flag.String("transport", "stdio", "Transport type (stdio or sse)")
+	host := flag.String("host", "127.0.0.1", "Host for SSE transport")
 	port := flag.Int("port", 8080, "Port for SSE transport")
 	workerCount := flag.Int("thinking-worker", 0, "Number of workers for the Gather phase (overrides THINKING_WORKER_COUNT env)")
 	shmRoot := flag.String("shm-root", "", "Root directory for shared memory storage (overrides SHM_ROOT env)")
@@ -178,8 +179,8 @@ Parameters:
 			return s
 		}, nil)
 
-		fmt.Fprintf(os.Stderr, "Sequential Thinking MCP Server running on SSE at :%d\n", *port)
-		if err := http.ListenAndServe(fmt.Sprintf(":%d", *port), handler); err != nil {
+		fmt.Fprintf(os.Stderr, "Sequential Thinking MCP Server running on SSE at %s:%d\n", *host, *port)
+		if err := http.ListenAndServe(fmt.Sprintf("%s:%d", *host, *port), handler); err != nil {
 			log.Fatalf("SSE server failed: %v", err)
 		}
 	default:

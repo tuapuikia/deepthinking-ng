@@ -3,11 +3,27 @@ package main
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 
 	"github.com/fatih/color"
 )
+
+var (
+	reEmail  = regexp.MustCompile(`(?i)[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}`)
+	reOpenAI = regexp.MustCompile(`\bsk-[a-zA-Z0-9]{20,}\b`)
+	reAWS    = regexp.MustCompile(`\bAKIA[0-9A-Z]{16}\b`)
+	reHex    = regexp.MustCompile(`\b[a-fA-F0-9]{32,}\b`)
+)
+
+func redact(s string) string {
+	s = reEmail.ReplaceAllString(s, "[REDACTED EMAIL]")
+	s = reOpenAI.ReplaceAllString(s, "[REDACTED OPENAI KEY]")
+	s = reAWS.ReplaceAllString(s, "[REDACTED AWS ID]")
+	s = reHex.ReplaceAllString(s, "[REDACTED KEY]")
+	return s
+}
 
 // ThoughtData represents the input for a single thinking step.
 type ThoughtData struct {
@@ -105,7 +121,8 @@ func (s *SequentialThinkingServer) formatThought(data ThoughtData) string {
 
 	visibleHeaderLen := len(fmt.Sprintf("Thought %s %d/%d%s", phaseInfo, data.ThoughtNumber, data.TotalThoughts, context)) + 3
 
-	contentLen := len(data.Thought)
+	thought := redact(data.Thought)
+	contentLen := len(thought)
 	maxLen := visibleHeaderLen
 	if contentLen > maxLen {
 		maxLen = contentLen
@@ -118,7 +135,7 @@ func (s *SequentialThinkingServer) formatThought(data ThoughtData) string {
 	sb.WriteString(fmt.Sprintf("┌%s┐\n", border))
 	sb.WriteString(fmt.Sprintf("│ %s%s │\n", header, strings.Repeat(" ", maxLen-visibleHeaderLen)))
 	sb.WriteString(fmt.Sprintf("├%s┤\n", border))
-	sb.WriteString(fmt.Sprintf("│ %s%s │\n", data.Thought, strings.Repeat(" ", maxLen-contentLen)))
+	sb.WriteString(fmt.Sprintf("│ %s%s │\n", thought, strings.Repeat(" ", maxLen-contentLen)))
 	sb.WriteString(fmt.Sprintf("└%s┘", border))
 
 	return sb.String()
