@@ -52,7 +52,7 @@ func NewSharedMemoryManager(shmRoot string) *SharedMemoryManager {
 	shmRoot = filepath.Clean(shmRoot)
 
 	// Strict Rule: Only accept paths under /dev/shm to prevent path traversal or dangerous path usage
-	if !strings.HasPrefix(shmRoot, "/dev/shm") {
+	if shmRoot != "/dev/shm" && !strings.HasPrefix(shmRoot, "/dev/shm/") {
 		fmt.Fprintf(os.Stderr, "Warning: shm-root '%s' is outside /dev/shm. Falling back to default: /dev/shm/deepthinking-ng\n", shmRoot)
 		shmRoot = "/dev/shm/deepthinking-ng"
 	}

@@ -30,9 +30,14 @@ The server implements **Deep Redaction** at the entry point:
 - **Supported Patterns**: GitHub tokens, OpenAI keys, AWS IDs, Google API keys, Slack tokens, and Private Keys (RSA/Generic).
 
 ### Shared Memory Security
-- **Strict Path Enforcement**: The `SHM_ROOT` is strictly restricted to subdirectories of `/dev/shm`. Any attempt to use paths outside of `/dev/shm` will result in a fallback to the default safe path.
+- **Strict Path Enforcement**: The `SHM_ROOT` is strictly restricted to `/dev/shm` or its subdirectories. Any attempt to use paths outside of `/dev/shm` will result in a fallback to the default safe path.
 - **Restrictive Permissions**: All directories and files created in shared memory use restrictive permissions (`0700` for directories, `0600` for files), ensuring only the user running the server can access them.
 - **Session Isolation**: Each session is isolated into its own subdirectory using a random UUID to prevent cross-session data leakage.
+
+### Secure Deployment Recommendation
+For maximum security, it is highly recommended to run this MCP server in an **isolated environment**, such as a Docker container or a dedicated sandbox. While the server implements multiple layers of protection (Deep Redaction, restrictive permissions, and path enforcement), running in a shared environment still carries inherent risks. 
+
+**User Responsibility**: Ensuring the "fort" is secure is a shared responsibility. While the code tries its best to avoid leakage, you should ensure the environment where the server runs is properly secured and isolated to prevent any potential data exposure.
 
 ## Installation
 
