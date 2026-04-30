@@ -8,14 +8,31 @@ A high-performance Sequential Thinking MCP server with **GPT (Gather, Process, T
   - **Gather (G)**: Multiple workers (default 5) generate diverse solutions.
   - **Process (P)**: A single worker implements the chosen solution.
   - **Test (T)**: A single worker verifies the result.
-- **Thinking Tracks**: Specialized modes that provide tailored guidance for different engineering tasks:
+- **Thinking Tracks**: Specialized modes that provide tailored guidance for different engineering tasks. You can use the built-in tracks or define your own **custom track** directly in the prompt:
   - `bug-fix`: Focuses on root cause isolation and regression prevention.
   - `feature`: Focuses on scalability and architectural alignment.
   - `security`: Focuses on threat modeling and defense-in-depth.
-- **LLM-Powered Synthesis**: Dynamically synthesizes multiple worker perspectives into a single, high-fidelity "Super Idea" using track-specific strategic prompts.
+  - `custom-name`: (e.g., `refactor`, `performance`) Provides dynamic guidance for any alphanumeric track name (up to 32 characters).
+- **LLM-Powered Synthesis**: Dynamically synthesizes multiple worker perspectives into a single, high-fidelity "Super Idea" using track-specific strategic prompts. Custom tracks receive generalized high-quality engineering guidance.
 - **Shared Memory**: Uses `/dev/shm` to share thoughts between workers in the Gather phase, enabling the synthesis of a "Super Idea".
 - **Dynamic Thinking**: Adjust total thoughts, branch, and revise as understanding deepens.
 - **Interactive Logging**: Beautifully formatted console output with phase and worker identification.
+
+## Security & Privacy
+
+DeepThinking-NG is designed with a "Protect the Fort" philosophy to ensure your sensitive data remains secure.
+
+### Deep Redaction
+The server implements **Deep Redaction** at the entry point:
+- **Input Filtering**: All thoughts are scanned for sensitive patterns (API keys, tokens, private keys) as soon as they are received.
+- **No Leak to Memory/Disk**: Secrets are redacted *before* being stored in memory or written to shared memory files.
+- **No Leak to LLM**: The server only sends redacted thoughts back to the LLM during the synthesis phase.
+- **Supported Patterns**: GitHub tokens, OpenAI keys, AWS IDs, Google API keys, Slack tokens, and Private Keys (RSA/Generic).
+
+### Shared Memory Security
+- **Strict Path Enforcement**: The `SHM_ROOT` is strictly restricted to subdirectories of `/dev/shm`. Any attempt to use paths outside of `/dev/shm` will result in a fallback to the default safe path.
+- **Restrictive Permissions**: All directories and files created in shared memory use restrictive permissions (`0700` for directories, `0600` for files), ensuring only the user running the server can access them.
+- **Session Isolation**: Each session is isolated into its own subdirectory using a random UUID to prevent cross-session data leakage.
 
 ## Installation
 
@@ -92,20 +109,25 @@ The primary tool for the thinking process.
 - `revisesThought` (int): The thought number being revised.
 - `branchFromThought` (int): The thought number to branch from.
 - `branchId` (string): Unique ID for the branch.
-- `track` (string): The thinking track to use (`bug-fix`, `feature`, `security`).
+- `track` (string): The thinking track to use (e.g., `bug-fix`, `feature`, `security`, or a custom name like `refactor`).
 
 ### `reset_thinking`
 Resets the thinking session and clears all shared memory in `/dev/shm`.
 
 ## GPT Workflow Example
 
+### Using a Built-in Track (`bug-fix`)
 1. **Gather Phase**:
    - Worker 1: `{"thought": "Solution A...", "phase": "gather", "workerId": 1, "track": "bug-fix"}`
-   - Worker 2: `{"thought": "Solution B...", "phase": "gather", "workerId": 2, "track": "bug-fix"}`
-   - Worker 3: `{"thought": "Solution C...", "phase": "gather", "workerId": 3, "track": "bug-fix"}`
-   - Worker 4: `{"thought": "Solution D...", "phase": "gather", "workerId": 4, "track": "bug-fix"}`
-   - Worker 5: `{"thought": "Solution E...", "phase": "gather", "workerId": 5, "track": "bug-fix"}`
-   - *Result*: The tool returns all 5 solutions and a synthesized **Super Idea** with track-specific guidance.
+   - ...
+   - *Result*: Returns synthesized **Super Idea** with specialized bug-fixing guidance.
+
+### Using a Custom Track (`performance`)
+1. **Gather Phase**:
+   - Worker 1: `{"thought": "Optimization A...", "phase": "gather", "workerId": 1, "track": "performance"}`
+   - Worker 2: `{"thought": "Optimization B...", "phase": "gather", "workerId": 2, "track": "performance"}`
+   - ...
+   - *Result*: Returns synthesized **Super Idea** with dynamic guidance: *"As this is a 'PERFORMANCE' track, prioritize the core objectives of this mode..."*
 
 2. **Process Phase**:
    - Worker 1: `{"thought": "Implementing synthesized strategy...", "phase": "process", "workerId": 1}`

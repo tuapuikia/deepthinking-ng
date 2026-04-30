@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 )
 
@@ -49,6 +50,12 @@ func NewSharedMemoryManager(shmRoot string) *SharedMemoryManager {
 		shmRoot = getEnv("SHM_ROOT", "/dev/shm/deepthinking-ng")
 	}
 	shmRoot = filepath.Clean(shmRoot)
+
+	// Strict Rule: Only accept paths under /dev/shm to prevent path traversal or dangerous path usage
+	if !strings.HasPrefix(shmRoot, "/dev/shm") {
+		fmt.Fprintf(os.Stderr, "Warning: shm-root '%s' is outside /dev/shm. Falling back to default: /dev/shm/deepthinking-ng\n", shmRoot)
+		shmRoot = "/dev/shm/deepthinking-ng"
+	}
 
 	shmPath := filepath.Join(shmRoot, sessionID)
 

@@ -15,6 +15,11 @@ var (
 	reOpenAI = regexp.MustCompile(`\bsk-[a-zA-Z0-9]{20,}\b`)
 	reAWS    = regexp.MustCompile(`\bAKIA[0-9A-Z]{16}\b`)
 	reHex    = regexp.MustCompile(`\b[a-fA-F0-9]{32,}\b`)
+	reTrack  = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,32}$`)
+	reGitHub = regexp.MustCompile(`\bgh[pso]_[a-zA-Z0-9]{36}\b`)
+	reGoogle = regexp.MustCompile(`\bAIza[0-9A-Za-z\-_]{35}\b`)
+	reSlack  = regexp.MustCompile(`\bxox[baprs]-[0-9a-zA-Z\-]{10,64}\b`)
+	rePrivKey = regexp.MustCompile(`(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----`)
 )
 
 func redact(s string) string {
@@ -22,7 +27,21 @@ func redact(s string) string {
 	s = reOpenAI.ReplaceAllString(s, "[REDACTED OPENAI KEY]")
 	s = reAWS.ReplaceAllString(s, "[REDACTED AWS ID]")
 	s = reHex.ReplaceAllString(s, "[REDACTED KEY]")
+	s = reGitHub.ReplaceAllString(s, "[REDACTED GITHUB TOKEN]")
+	s = reGoogle.ReplaceAllString(s, "[REDACTED GOOGLE KEY]")
+	s = reSlack.ReplaceAllString(s, "[REDACTED SLACK TOKEN]")
+	s = rePrivKey.ReplaceAllString(s, "[REDACTED PRIVATE KEY]")
 	return s
+}
+
+func validateTrack(track string) error {
+	if track == "" {
+		return nil
+	}
+	if !reTrack.MatchString(track) {
+		return fmt.Errorf("invalid track name: %s. Must be 1-32 characters and contain only alphanumeric characters, underscores, or hyphens", track)
+	}
+	return nil
 }
 
 // ThoughtData represents the input for a single thinking step.
@@ -146,6 +165,10 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Deep Redaction: Redact secrets at the entry point to prevent storage in memory/disk
+	// and to prevent sending them back to the LLM in the synthesis phase.
+	input.Thought = redact(input.Thought)
+
 	phaseProvided := input.Phase != ""
 
 	// Set defaults
@@ -202,6 +225,11 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 	validPhases := map[string]bool{"gather": true, "process": true, "test": true}
 	if !validPhases[input.Phase] {
 		return ThoughtResponse{}, fmt.Errorf("invalid phase: %s. Must be 'gather', 'process', or 'test'", input.Phase)
+	}
+
+	// Validate track
+	if err := validateTrack(input.Track); err != nil {
+		return ThoughtResponse{}, err
 	}
 
 	if input.ThinkingWorkerCount == 0 {
@@ -321,11 +349,15 @@ func (s *SequentialThinkingServer) synthesizeSuperIdea(thoughts []ThoughtData, t
 	case "security":
 		sb.WriteString("As this is a 'SECURITY' track, prioritize threat modeling, attack surface reduction, and the principle of defense-in-depth.")
 	default:
-		sb.WriteString("Synthesize a unified approach that incorporates the unique strengths of each proposal while resolving any contradictions or trade-offs identified.")
+		if track != "" {
+			sb.WriteString(fmt.Sprintf("As this is a '%s' track, prioritize the core objectives of this mode and ensure high-quality engineering standards.", strings.ToUpper(track)))
+		} else {
+			sb.WriteString("Synthesize a unified approach that incorporates the unique strengths of each proposal while resolving any contradictions or trade-offs identified.")
+		}
 	}
 
 	sb.WriteString("\n\nYour synthesis should be comprehensive and provide a clear path forward for the 'PROCESS' phase.")
 	sb.WriteString("\n\n➡️ NEXT STEP: Proceed to the 'PROCESS' phase to implement your synthesized strategy.")
 
-	return sb.String()
+	return redact(sb.String())
 }

@@ -2,3 +2,4 @@ output.log
 sse.log
 .gemini_security
 conductor
+test_output.log
