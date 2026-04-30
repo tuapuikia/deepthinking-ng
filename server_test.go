@@ -9,7 +9,7 @@ import (
 )
 
 func TestSequentialThinking(t *testing.T) {
-	server := NewSequentialThinkingServer()
+	server := NewSequentialThinkingServer(0, "")
 	defer os.RemoveAll(server.shm.shmPath)
 	// Ensure we start fresh
 	server.shm.ClearAll()
@@ -222,7 +222,7 @@ func TestSequentialThinking(t *testing.T) {
 }
 
 func TestResetThinking(t *testing.T) {
-	server := NewSequentialThinkingServer()
+	server := NewSequentialThinkingServer(0, "")
 	defer os.RemoveAll(server.shm.shmPath)
 	nextNeeded := true
 	server.ProcessThought(ThoughtData{Thought: "Test", NextThoughtNeeded: nextNeeded})
@@ -242,7 +242,7 @@ func TestResetThinking(t *testing.T) {
 }
 
 func TestMultipleThoughtsPerWorker(t *testing.T) {
-	server := NewSequentialThinkingServer()
+	server := NewSequentialThinkingServer(0, "")
 	defer os.RemoveAll(server.shm.shmPath)
 	server.shm.ClearAll()
 	server.thoughtHistory = nil
@@ -298,7 +298,7 @@ func TestMultipleThoughtsPerWorker(t *testing.T) {
 }
 
 func TestProcessPhaseTransition(t *testing.T) {
-	server := NewSequentialThinkingServer()
+	server := NewSequentialThinkingServer(0, "")
 	defer os.RemoveAll(server.shm.shmPath)
 	server.shm.ClearAll()
 	server.thoughtHistory = nil
@@ -360,7 +360,7 @@ func TestProcessPhaseTransition(t *testing.T) {
 
 func TestMCPSessionConsistency(t *testing.T) {
 	// This simulates exactly how main.go initializes the server once at boot
-	server := NewSequentialThinkingServer()
+	server := NewSequentialThinkingServer(0, "")
 	server.shm.ClearAll()
 	server.thoughtHistory = nil
 

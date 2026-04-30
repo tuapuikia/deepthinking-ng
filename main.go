@@ -15,6 +15,8 @@ import (
 func main() {
 	transportType := flag.String("transport", "stdio", "Transport type (stdio or sse)")
 	port := flag.Int("port", 8080, "Port for SSE transport")
+	workerCount := flag.Int("thinking-worker", 0, "Number of workers for the Gather phase (overrides THINKING_WORKER_COUNT env)")
+	shmRoot := flag.String("shm-root", "", "Root directory for shared memory storage (overrides SHM_ROOT env)")
 	flag.Parse()
 
 	s := mcp.NewServer(&mcp.Implementation{
@@ -22,7 +24,7 @@ func main() {
 		Version: "0.2.0",
 	}, nil)
 
-	thinkingServer := NewSequentialThinkingServer()
+	thinkingServer := NewSequentialThinkingServer(*workerCount, *shmRoot)
 
 	// Register the sequentialthinking tool
 	mcp.AddTool(s, &mcp.Tool{
