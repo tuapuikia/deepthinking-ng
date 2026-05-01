@@ -172,6 +172,7 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 	// Deep Redaction: Redact secrets at the entry point to prevent storage in memory/disk
 	// and to prevent sending them back to the LLM in the synthesis phase.
 	input.Thought = redact(input.Thought)
+	input.Context = redact(input.Context)
 
 	phaseProvided := input.Phase != ""
 
@@ -252,10 +253,19 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 		// Combine thoughts and clear gather phase to prevent reuse
 		s.shm.ClearPhase("gather")
 	} else if input.Phase == "test" {
-		processThoughts, _ := s.shm.GetPhaseThoughts("process")
-		if len(processThoughts) == 0 {
+		// Check in-memory history to allow SHM cleanup of previous phases
+		hasProcess := false
+		for _, t := range s.thoughtHistory {
+			if t.Phase == "process" {
+				hasProcess = true
+				break
+			}
+		}
+		if !hasProcess {
 			return ThoughtResponse{}, fmt.Errorf("STRICT WORKFLOW VIOLATION: Cannot enter 'test' phase. 'process' phase is incomplete. You must process the gathered ideas first using phase='process'")
 		}
+		// Clear process phase from SHM to avoid leakage as soon as we enter test
+		s.shm.ClearPhase("process")
 	}
 	// ---------------------------------------
 

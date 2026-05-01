@@ -553,6 +553,43 @@ func TestMarkdownFlowchartGeneration(t *testing.T) {
 	}
 }
 
+func TestRedaction(t *testing.T) {
+	server := NewSequentialThinkingServer(0, "")
+	defer os.RemoveAll(server.shm.shmPath)
+
+	t.Run("Redact Thought and Context", func(t *testing.T) {
+		secretEmail := "user@example.com"
+		secretKey := "sk-123456789012345678901234567890"
+		
+		args := ThoughtData{
+			Thought:           fmt.Sprintf("My email is %s", secretEmail),
+			Context:           fmt.Sprintf("Found key: %s", secretKey),
+			NextThoughtNeeded: false,
+		}
+
+		resp, err := server.ProcessThought(args)
+		if err != nil {
+			t.Fatalf("ProcessThought failed: %v", err)
+		}
+
+		if strings.Contains(resp.Context, secretKey) {
+			t.Error("Context was not redacted")
+		}
+		if !strings.Contains(resp.Context, "[REDACTED OPENAI KEY]") {
+			t.Error("Context redaction placeholder missing")
+		}
+
+		// Also check history (which is what gets saved to SHM)
+		lastThought := server.thoughtHistory[len(server.thoughtHistory)-1]
+		if strings.Contains(lastThought.Thought, secretEmail) {
+			t.Error("Thought in history was not redacted")
+		}
+		if strings.Contains(lastThought.Context, secretKey) {
+			t.Error("Context in history was not redacted")
+		}
+	})
+}
+
 func TestSuperIdeaSynthesisHint(t *testing.T) {
 	server := NewSequentialThinkingServer(1, "")
 	defer os.RemoveAll(server.shm.shmPath)

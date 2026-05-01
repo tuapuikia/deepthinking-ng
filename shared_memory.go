@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 )
@@ -17,6 +18,35 @@ func getEnv(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func getDefaultShmRoot() string {
+	switch runtime.GOOS {
+	case "linux":
+		return "/dev/shm/deepthinking-ng"
+	case "darwin":
+		return "/tmp/deepthinking-ng"
+	case "windows":
+		return filepath.Join(os.TempDir(), "deepthinking-ng")
+	default:
+		return filepath.Join(os.TempDir(), "deepthinking-ng")
+	}
+}
+
+func isPathSafe(path string) bool {
+	path = filepath.Clean(path)
+	switch runtime.GOOS {
+	case "linux":
+		// Stricter check: must start with /dev/shm/ to prevent /dev/shm-evil
+		return strings.HasPrefix(path, "/dev/shm/")
+	case "darwin":
+		// On macOS, /tmp is a symlink to /private/tmp, but we usually use /tmp
+		return strings.HasPrefix(path, "/tmp/") || strings.HasPrefix(path, "/private/tmp/") || strings.HasPrefix(path, os.TempDir())
+	case "windows":
+		return strings.HasPrefix(strings.ToLower(path), strings.ToLower(os.TempDir()))
+	default:
+		return strings.HasPrefix(path, os.TempDir())
+	}
 }
 
 func generateSessionID() string {
@@ -46,20 +76,22 @@ func NewSharedMemoryManager(shmRoot string) *SharedMemoryManager {
 		}
 	}
 
+	defaultRoot := getDefaultShmRoot()
 	if shmRoot == "" {
-		shmRoot = getEnv("SHM_ROOT", "/dev/shm/deepthinking-ng")
+		shmRoot = getEnv("SHM_ROOT", defaultRoot)
 	}
 	shmRoot = filepath.Clean(shmRoot)
 
-	// Strict Rule: Only accept paths under /dev/shm to prevent path traversal or dangerous path usage
-	if shmRoot != "/dev/shm" && !strings.HasPrefix(shmRoot, "/dev/shm/") {
-		fmt.Fprintf(os.Stderr, "Warning: shm-root '%s' is outside /dev/shm. Falling back to default: /dev/shm/deepthinking-ng\n", shmRoot)
-		shmRoot = "/dev/shm/deepthinking-ng"
+	// Strict Rule: Only accept paths in volatile/temp areas to prevent path traversal or dangerous path usage
+	if !isPathSafe(shmRoot) {
+		fmt.Fprintf(os.Stderr, "Warning: shm-root '%s' is outside volatile storage for %s. Falling back to default: %s\n", shmRoot, runtime.GOOS, defaultRoot)
+		shmRoot = defaultRoot
 	}
 
 	shmPath := filepath.Join(shmRoot, sessionID)
 
 	// Ensure root directory exists with restrictive permissions (0700)
+	// Note: On Windows, permissions are handled differently, but 0700 is a safe default for Unix-like systems.
 	os.MkdirAll(shmPath, 0700)
 	fmt.Fprintf(os.Stderr, "Shared memory initialized with random session ID: %s\n", sessionID)
 	fmt.Fprintf(os.Stderr, "Path: %s\n", shmPath)
