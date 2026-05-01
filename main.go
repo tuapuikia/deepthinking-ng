@@ -22,7 +22,7 @@ func main() {
 
 	s := mcp.NewServer(&mcp.Implementation{
 		Name:    "deepthinking-ng",
-		Version: "0.2.0",
+		Version: "0.3.0",
 	}, nil)
 
 	thinkingServer := NewSequentialThinkingServer(*workerCount, *shmRoot)
@@ -33,11 +33,17 @@ func main() {
 		Description: `A detailed tool for dynamic and reflective problem-solving through thoughts with GPT (Gather, Process, Test) workflow.
 This tool helps analyze problems through a flexible thinking process that can adapt and evolve.
 
-GPT Workflow:
-- G (Gather): Multiple workers (default 5) generate different solutions. You MUST use this phase to explore at least 5 different perspectives before moving to 'process'.
-  * AGENTIC DISCOVERY: In this phase, you should proactively use your available tools (e.g., filesystem tools, search tools, or other MCP tools) to gather context and ground your perspectives.
-- P (Process): A single worker processes the chosen solution.
-- T (Test): A single worker tests and verifies the result.
+CRITICAL RULES:
+1. MANDATORY FIELDS: You MUST always provide 'thought', 'thoughtNumber', 'totalThoughts', and 'nextThoughtNeeded'.
+2. CAMELCASE ONLY: Use 'totalThoughts', NOT 'total_thoughts'. All parameters are camelCase.
+3. GPT WORKFLOW:
+   - G (Gather): Multiple workers (default 5) generate different solutions. You MUST use this phase to explore at least 5 different perspectives before moving to 'process'.
+     * Use phase='gather' and increment 'workerId' (1, 2, 3, 4, 5).
+     * AGENTIC DISCOVERY: In this phase, you should proactively use your available tools (e.g., filesystem tools, search tools, or other MCP tools) to gather context and ground your perspectives.
+   - P (Process): A single worker processes the chosen solution.
+     * Use phase='process'. Only available AFTER all gather steps are complete.
+   - T (Test): A single worker tests and verifies the result.
+     * Use phase='test'. Only available AFTER the process step is complete.
 
 Shared Memory:
 Uses /dev/shm to share thoughts between workers during the Gather phase to synthesize a "Super Idea".
@@ -55,6 +61,7 @@ Parameters:
 - branchFromThought: Which thought number is the branching point.
 - branchId: Identifier for the current branch.
 - needsMoreThoughts: If reaching end but realizing more thoughts needed.
+- track: The thinking track to use (e.g., 'bug-fix', 'feature', 'security').
 - context: (Optional) Discovered tools, environment details, or filesystem context to ground the thinking.`,
 		InputSchema: struct {
 			Type       string         `json:"type"`

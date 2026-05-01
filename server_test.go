@@ -147,9 +147,9 @@ func TestSequentialThinking(t *testing.T) {
 		}
 		_, err := server.ProcessThought(argsProcess)
 		if err == nil {
-			t.Error("Expected error when entering 'process' phase before 'gather' is complete")
-		} else if err.Error() != "STRICT WORKFLOW VIOLATION: Cannot enter 'process' phase. 'gather' phase is incomplete. You must gather perspectives from 3 workers (currently have 0). Use phase='gather' with different workerIds" {
-			t.Errorf("Unexpected error message: %v", err)
+			t.Fatal("Expected error when entering process phase without gathering")
+		} else if err.Error() != "STRICT WORKFLOW VIOLATION: Cannot enter 'process' phase. 'gather' phase is incomplete. You must gather perspectives from 3 workers (currently have 0). FIX: Call this tool again with phase='gather' and workerId=1" {
+			t.Errorf("Unexpected error message: %v", err.Error())
 		}
 
 		// 2. Do a partial gather
@@ -178,9 +178,9 @@ func TestSequentialThinking(t *testing.T) {
 		}
 		_, err = server.ProcessThought(argsTest)
 		if err == nil {
-			t.Error("Expected error when entering 'test' phase before 'process' is complete")
-		} else if err.Error() != "STRICT WORKFLOW VIOLATION: Cannot enter 'test' phase. 'process' phase is incomplete. You must process the gathered ideas first using phase='process'" {
-			t.Errorf("Unexpected error message: %v", err)
+			t.Fatal("Expected error when entering test phase without processing")
+		} else if err.Error() != "STRICT WORKFLOW VIOLATION: Cannot enter 'test' phase. 'process' phase is incomplete. You must process the gathered ideas first using phase='process'. FIX: Call this tool again with phase='process'" {
+			t.Errorf("Unexpected error message: %v", err.Error())
 		}
 
 		// 5. Complete gather
