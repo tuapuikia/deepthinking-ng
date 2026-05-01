@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -18,14 +19,20 @@ func main() {
 	port := flag.Int("port", 8080, "Port for SSE transport")
 	workerCount := flag.Int("thinking-worker", 0, "Number of workers for the Gather phase (overrides THINKING_WORKER_COUNT env)")
 	shmRoot := flag.String("shm-root", "", "Root directory for shared memory storage (overrides SHM_ROOT env)")
+	disableDiagram := flag.Bool("disable-diagram", false, "Disable markdown flowchart generation by default (overrides DISABLE_DIAGRAM env)")
 	flag.Parse()
+
+	defaultEnableDiagram := true
+	if *disableDiagram || strings.ToLower(os.Getenv("DISABLE_DIAGRAM")) == "true" {
+		defaultEnableDiagram = false
+	}
 
 	s := mcp.NewServer(&mcp.Implementation{
 		Name:    "deepthinking-ng",
 		Version: "0.3.0",
 	}, nil)
 
-	thinkingServer := NewSequentialThinkingServer(*workerCount, *shmRoot)
+	thinkingServer := NewSequentialThinkingServer(*workerCount, *shmRoot, defaultEnableDiagram)
 
 	// Register the sequentialthinking tool
 	mcp.AddTool(s, &mcp.Tool{
@@ -126,6 +133,10 @@ Parameters:
 				"context": map[string]any{
 					"type":        "string",
 					"description": "Discovered tools, environment details, or filesystem context to ground the thinking",
+				},
+				"generateDiagram": map[string]any{
+					"type":        "boolean",
+					"description": "Set to true to generate a markdown-native ASCII flowchart in the response. Enabled by default unless disabled via server config. Set to false if the user explicitly asks not to generate a diagram.",
 				},
 			},
 			Required: []string{"thought", "thoughtNumber", "totalThoughts", "nextThoughtNeeded"},

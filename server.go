@@ -62,7 +62,7 @@ type ThoughtData struct {
 	ThinkingWorkerCount int    `json:"thinkingWorkerCount,omitempty"` // default 5
 	Track               string `json:"track,omitempty"`               // "bug-fix", "feature", "security", etc.
 	Context             string `json:"context,omitempty"`             // Discovered tools, environment, etc.
-	GenerateDiagram     bool   `json:"generateDiagram,omitempty"`     // Opt-in flag for Mermaid diagram
+	GenerateDiagram     *bool  `json:"generateDiagram,omitempty"`     // Opt-in flag for Mermaid diagram
 }
 
 // ThoughtResponse represents the structured output of a thinking step.
@@ -91,11 +91,13 @@ type SequentialThinkingServer struct {
 	branches              map[string][]ThoughtData
 	disableThoughtLogging bool
 	defaultWorkerCount    int
+	defaultEnableDiagram  bool
+	currentFlowchartFile  string
 	shm                   *SharedMemoryManager
 }
 
 // NewSequentialThinkingServer creates a new instance of the server.
-func NewSequentialThinkingServer(workerCount int, shmRoot string) *SequentialThinkingServer {
+func NewSequentialThinkingServer(workerCount int, shmRoot string, defaultEnableDiagram bool) *SequentialThinkingServer {
 	disableLogging := strings.ToLower(os.Getenv("DISABLE_THOUGHT_LOGGING")) == "true"
 
 	if workerCount <= 0 {
@@ -110,7 +112,40 @@ func NewSequentialThinkingServer(workerCount int, shmRoot string) *SequentialThi
 		branches:              make(map[string][]ThoughtData),
 		disableThoughtLogging: disableLogging,
 		defaultWorkerCount:    workerCount,
+		defaultEnableDiagram:  defaultEnableDiagram,
 		shm:                   NewSharedMemoryManager(shmRoot),
+	}
+}
+
+func (s *SequentialThinkingServer) getAvailableFilename() string {
+	base := "deepthinking-flow.md"
+	if _, err := os.Stat(base); os.IsNotExist(err) {
+		return base
+	}
+
+	i := 1
+	for {
+		filename := fmt.Sprintf("deepthinking-%d-flow.md", i)
+		if _, err := os.Stat(filename); os.IsNotExist(err) {
+			return filename
+		}
+		i++
+	}
+}
+
+func (s *SequentialThinkingServer) saveFlowchartLocked(content string) {
+	if content == "" {
+		return
+	}
+
+	if s.currentFlowchartFile == "" {
+		s.currentFlowchartFile = s.getAvailableFilename()
+	}
+	filename := s.currentFlowchartFile
+
+	err := os.WriteFile(filename, []byte(content), 0644)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error saving flowchart to %s: %v\n", filename, err)
 	}
 }
 
@@ -315,9 +350,15 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 		Context:              input.Context,
 	}
 
-	// Generate Markdown flowchart if requested
-	if input.GenerateDiagram {
+	// Generate Markdown flowchart if requested or enabled by default
+	shouldGenerateDiagram := s.defaultEnableDiagram
+	if input.GenerateDiagram != nil {
+		shouldGenerateDiagram = *input.GenerateDiagram
+	}
+
+	if shouldGenerateDiagram {
 		resp.Flowchart = s.generateMarkdownFlowchart()
+		s.saveFlowchartLocked(resp.Flowchart)
 	}
 
 	// GPT Workflow Logic
@@ -393,12 +434,33 @@ func (s *SequentialThinkingServer) synthesizeSuperIdea(thoughts []ThoughtData, t
 	return redact(sb.String())
 }
 
+func (s *SequentialThinkingServer) wrapText(text string, width int) []string {
+	var lines []string
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return nil
+	}
+
+	currentLine := words[0]
+	for _, word := range words[1:] {
+		if len(currentLine)+1+len(word) > width {
+			lines = append(lines, currentLine)
+			currentLine = word
+		} else {
+			currentLine += " " + word
+		}
+	}
+	lines = append(lines, currentLine)
+	return lines
+}
+
 func (s *SequentialThinkingServer) generateMarkdownFlowchart() string {
 	var sb strings.Builder
 	sb.WriteString("```text\n")
 	sb.WriteString("🧠 DEEPTHINKING FLOWCHART\n")
 	sb.WriteString("=========================\n\n")
 
+	boxWidth := 60
 	currentPhase := ""
 	for i, t := range s.thoughtHistory {
 		// Phase Header
@@ -408,23 +470,41 @@ func (s *SequentialThinkingServer) generateMarkdownFlowchart() string {
 		}
 
 		// Thought Box
-		nodeLabel := fmt.Sprintf("T%d (W%d)", t.ThoughtNumber, t.WorkerID)
-		boxWidth := 22
-		if len(nodeLabel)+2 > boxWidth {
-			boxWidth = len(nodeLabel) + 4
-		}
-
 		border := "+" + strings.Repeat("-", boxWidth-2) + "+"
 		sb.WriteString(border + "\n")
-		
-		content := nodeLabel
+
+		// Header: T# (W#)
+		header := fmt.Sprintf("T%d (W%d)", t.ThoughtNumber, t.WorkerID)
 		if t.IsRevision != nil && *t.IsRevision {
-			content += " [REV]"
+			header += " [REV]"
 		}
+		leftPad := (boxWidth - 2 - len(header)) / 2
+		rightPad := boxWidth - 2 - len(header) - leftPad
+		sb.WriteString(fmt.Sprintf("|%s%s%s|\n", strings.Repeat(" ", leftPad), header, strings.Repeat(" ", rightPad)))
 		
-		leftPad := (boxWidth - 2 - len(content)) / 2
-		rightPad := boxWidth - 2 - len(content) - leftPad
-		sb.WriteString(fmt.Sprintf("|%s%s%s|\n", strings.Repeat(" ", leftPad), content, strings.Repeat(" ", rightPad)))
+		sb.WriteString("|" + strings.Repeat("-", boxWidth-2) + "|\n")
+
+		// Body: Thought Snippet
+		thoughtLines := s.wrapText(t.Thought, boxWidth-6)
+		if len(thoughtLines) > 3 {
+			thoughtLines = append(thoughtLines[:3], "...")
+		}
+		for _, line := range thoughtLines {
+			sb.WriteString(fmt.Sprintf("|  %-*s  |\n", boxWidth-6, line))
+		}
+
+		// Footer: Context/Tools
+		if t.Context != "" {
+			sb.WriteString("|" + strings.Repeat(".", boxWidth-2) + "|\n")
+			contextLines := s.wrapText("Context: "+t.Context, boxWidth-6)
+			if len(contextLines) > 2 {
+				contextLines = append(contextLines[:2], "...")
+			}
+			for _, line := range contextLines {
+				sb.WriteString(fmt.Sprintf("|  %-*s  |\n", boxWidth-6, line))
+			}
+		}
+
 		sb.WriteString(border + "\n")
 
 		// Annotations (Branch/Revision)
@@ -441,8 +521,8 @@ func (s *SequentialThinkingServer) generateMarkdownFlowchart() string {
 
 		// Arrow to next
 		if i < len(s.thoughtHistory)-1 {
-			sb.WriteString("        |\n")
-			sb.WriteString("        v\n")
+			sb.WriteString(strings.Repeat(" ", boxWidth/2) + "|\n")
+			sb.WriteString(strings.Repeat(" ", boxWidth/2) + "v\n")
 		}
 	}
 

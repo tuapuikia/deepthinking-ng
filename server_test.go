@@ -3,12 +3,13 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
 func TestSequentialThinking(t *testing.T) {
-	server := NewSequentialThinkingServer(0, "")
+	server := NewSequentialThinkingServer(0, "", false)
 	defer os.RemoveAll(server.shm.shmPath)
 	// Ensure we start fresh
 	server.shm.ClearAll()
@@ -221,7 +222,7 @@ func TestSequentialThinking(t *testing.T) {
 }
 
 func TestResetThinking(t *testing.T) {
-	server := NewSequentialThinkingServer(0, "")
+	server := NewSequentialThinkingServer(0, "", false)
 	defer os.RemoveAll(server.shm.shmPath)
 	nextNeeded := true
 	server.ProcessThought(ThoughtData{Thought: "Test", NextThoughtNeeded: nextNeeded})
@@ -241,7 +242,7 @@ func TestResetThinking(t *testing.T) {
 }
 
 func TestMultipleThoughtsPerWorker(t *testing.T) {
-	server := NewSequentialThinkingServer(0, "")
+	server := NewSequentialThinkingServer(0, "", false)
 	defer os.RemoveAll(server.shm.shmPath)
 	server.shm.ClearAll()
 	server.thoughtHistory = nil
@@ -297,7 +298,7 @@ func TestMultipleThoughtsPerWorker(t *testing.T) {
 }
 
 func TestProcessPhaseTransition(t *testing.T) {
-	server := NewSequentialThinkingServer(0, "")
+	server := NewSequentialThinkingServer(0, "", false)
 	defer os.RemoveAll(server.shm.shmPath)
 	server.shm.ClearAll()
 	server.thoughtHistory = nil
@@ -359,7 +360,7 @@ func TestProcessPhaseTransition(t *testing.T) {
 
 func TestMCPSessionConsistency(t *testing.T) {
 	// This simulates exactly how main.go initializes the server once at boot
-	server := NewSequentialThinkingServer(0, "")
+	server := NewSequentialThinkingServer(0, "", false)
 	server.shm.ClearAll()
 	server.thoughtHistory = nil
 
@@ -427,7 +428,7 @@ func TestMCPSessionConsistency(t *testing.T) {
 }
 
 func TestContextAwareThinking(t *testing.T) {
-	server := NewSequentialThinkingServer(2, "")
+	server := NewSequentialThinkingServer(2, "", false)
 	defer os.RemoveAll(server.shm.shmPath)
 	server.shm.ClearAll()
 	server.thoughtHistory = nil
@@ -507,7 +508,7 @@ func TestValidateTrack(t *testing.T) {
 }
 
 func TestMarkdownFlowchartGeneration(t *testing.T) {
-	server := NewSequentialThinkingServer(1, "")
+	server := NewSequentialThinkingServer(1, "", false)
 	defer os.RemoveAll(server.shm.shmPath)
 	server.shm.ClearAll()
 	server.thoughtHistory = nil
@@ -529,11 +530,12 @@ func TestMarkdownFlowchartGeneration(t *testing.T) {
 	})
 
 	// 3. Test with Diagram Request
+	trueVal := true
 	resp, err := server.ProcessThought(ThoughtData{
 		Thought:           "Test 1",
 		Phase:             "test",
 		WorkerID:          1,
-		GenerateDiagram:   true,
+		GenerateDiagram:   &trueVal,
 		NextThoughtNeeded: false,
 	})
 
@@ -553,8 +555,69 @@ func TestMarkdownFlowchartGeneration(t *testing.T) {
 	}
 }
 
+func TestFlowchartFileSaving(t *testing.T) {
+	server := NewSequentialThinkingServer(1, "", true) // Enable diagram by default
+	defer os.RemoveAll(server.shm.shmPath)
+	server.shm.ClearAll()
+	server.thoughtHistory = nil
+
+	// Clean up any existing test files
+	files, _ := filepath.Glob("deepthinking-*-flow.md")
+	for _, f := range files {
+		os.Remove(f)
+	}
+	os.Remove("deepthinking-flow.md")
+
+	// 1. First session/thought should create deepthinking-flow.md
+	server.ProcessThought(ThoughtData{
+		Thought:           "Thought 1",
+		Phase:             "gather",
+		WorkerID:          1,
+		NextThoughtNeeded: true,
+	})
+
+	if _, err := os.Stat("deepthinking-flow.md"); os.IsNotExist(err) {
+		t.Error("Expected deepthinking-flow.md to be created")
+	}
+	os.Remove("deepthinking-flow.md")
+
+	// 2. Create a dummy file to force increment
+	os.WriteFile("deepthinking-flow.md", []byte("dummy"), 0644)
+	defer os.Remove("deepthinking-flow.md")
+
+	server2 := NewSequentialThinkingServer(1, "", true)
+	server2.ProcessThought(ThoughtData{
+		Thought:           "Thought 2",
+		Phase:             "gather",
+		WorkerID:          1,
+		NextThoughtNeeded: true,
+	})
+
+	if _, err := os.Stat("deepthinking-1-flow.md"); os.IsNotExist(err) {
+		t.Error("Expected deepthinking-1-flow.md to be created")
+	}
+	os.Remove("deepthinking-1-flow.md")
+
+	// 3. Create another dummy to force deepthinking-2-flow.md
+	os.WriteFile("deepthinking-1-flow.md", []byte("dummy"), 0644)
+	defer os.Remove("deepthinking-1-flow.md")
+
+	server3 := NewSequentialThinkingServer(1, "", true)
+	server3.ProcessThought(ThoughtData{
+		Thought:           "Thought 3",
+		Phase:             "gather",
+		WorkerID:          1,
+		NextThoughtNeeded: true,
+	})
+
+	if _, err := os.Stat("deepthinking-2-flow.md"); os.IsNotExist(err) {
+		t.Error("Expected deepthinking-2-flow.md to be created")
+	}
+	os.Remove("deepthinking-2-flow.md")
+}
+
 func TestRedaction(t *testing.T) {
-	server := NewSequentialThinkingServer(0, "")
+	server := NewSequentialThinkingServer(0, "", false)
 	defer os.RemoveAll(server.shm.shmPath)
 
 	t.Run("Redact Thought and Context", func(t *testing.T) {
@@ -591,7 +654,7 @@ func TestRedaction(t *testing.T) {
 }
 
 func TestSuperIdeaSynthesisHint(t *testing.T) {
-	server := NewSequentialThinkingServer(1, "")
+	server := NewSequentialThinkingServer(1, "", false)
 	defer os.RemoveAll(server.shm.shmPath)
 	server.shm.ClearAll()
 	server.thoughtHistory = nil
