@@ -61,6 +61,8 @@ type ThoughtData struct {
 	WorkerID            int    `json:"workerId,omitempty"`            // 1, 2, 3...
 	ThinkingWorkerCount int    `json:"thinkingWorkerCount,omitempty"` // default 5
 	Track               string `json:"track,omitempty"`               // "bug-fix", "feature", "security", etc.
+	Context             string `json:"context,omitempty"`             // Discovered tools, environment, etc.
+	GenerateDiagram     bool   `json:"generateDiagram,omitempty"`     // Opt-in flag for Mermaid diagram
 }
 
 // ThoughtResponse represents the structured output of a thinking step.
@@ -78,6 +80,8 @@ type ThoughtResponse struct {
 	AllWorkerThoughts []string `json:"allWorkerThoughts,omitempty"`
 	SuperIdea         string   `json:"superIdea,omitempty"`
 	Track             string   `json:"track,omitempty"`
+	Context           string   `json:"context,omitempty"`
+	Flowchart         string   `json:"flowchart,omitempty"` // Markdown-native ASCII flowchart
 }
 
 // SequentialThinkingServer manages the state of the thinking process.
@@ -298,6 +302,12 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 		Phase:                input.Phase,
 		SessionID:            s.shm.GetSessionID(),
 		Track:                input.Track,
+		Context:              input.Context,
+	}
+
+	// Generate Markdown flowchart if requested
+	if input.GenerateDiagram {
+		resp.Flowchart = s.generateMarkdownFlowchart()
 	}
 
 	// GPT Workflow Logic
@@ -306,11 +316,15 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 		if len(thoughts) >= input.ThinkingWorkerCount {
 			resp.Status = "all_workers_finished"
 			var allThoughts []string
+			var combinedContext []string
 			for _, t := range thoughts {
 				allThoughts = append(allThoughts, fmt.Sprintf("Worker %d: %s", t.WorkerID, t.Thought))
+				if t.Context != "" {
+					combinedContext = append(combinedContext, fmt.Sprintf("Worker %d Context: %s", t.WorkerID, t.Context))
+				}
 			}
 			resp.AllWorkerThoughts = allThoughts
-			resp.SuperIdea = s.synthesizeSuperIdea(thoughts, input.Track)
+			resp.SuperIdea = s.synthesizeSuperIdea(thoughts, input.Track, strings.Join(combinedContext, "\n"))
 		} else {
 			resp.Status = fmt.Sprintf("waiting_for_workers (%d/%d)", len(thoughts), input.ThinkingWorkerCount)
 		}
@@ -321,13 +335,19 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 	return resp, nil
 }
 
-func (s *SequentialThinkingServer) synthesizeSuperIdea(thoughts []ThoughtData, track string) string {
+func (s *SequentialThinkingServer) synthesizeSuperIdea(thoughts []ThoughtData, track string, context string) string {
 	var sb strings.Builder
 	sb.WriteString("🚀 SUPER IDEA SYNTHESIS\n")
 	sb.WriteString("=======================\n\n")
 
 	if track != "" {
 		sb.WriteString(fmt.Sprintf("🛤️ TRACK: %s\n\n", strings.ToUpper(track)))
+	}
+
+	if context != "" {
+		sb.WriteString("🌍 ENVIRONMENTAL CONTEXT:\n")
+		sb.WriteString(context)
+		sb.WriteString("\n\n")
 	}
 
 	sb.WriteString("The following perspectives have been gathered and analyzed from multiple thinking workers:\n\n")
@@ -357,7 +377,66 @@ func (s *SequentialThinkingServer) synthesizeSuperIdea(thoughts []ThoughtData, t
 	}
 
 	sb.WriteString("\n\nYour synthesis should be comprehensive and provide a clear path forward for the 'PROCESS' phase.")
+	sb.WriteString("\n\n💡 TIP: If you want to visualize this thinking path, set 'generateDiagram: true' in your next step.")
 	sb.WriteString("\n\n➡️ NEXT STEP: Proceed to the 'PROCESS' phase to implement your synthesized strategy.")
 
 	return redact(sb.String())
+}
+
+func (s *SequentialThinkingServer) generateMarkdownFlowchart() string {
+	var sb strings.Builder
+	sb.WriteString("```text\n")
+	sb.WriteString("🧠 DEEPTHINKING FLOWCHART\n")
+	sb.WriteString("=========================\n\n")
+
+	currentPhase := ""
+	for i, t := range s.thoughtHistory {
+		// Phase Header
+		if t.Phase != currentPhase {
+			currentPhase = t.Phase
+			sb.WriteString(fmt.Sprintf("\n--- %s PHASE ---\n", strings.ToUpper(currentPhase)))
+		}
+
+		// Thought Box
+		nodeLabel := fmt.Sprintf("T%d (W%d)", t.ThoughtNumber, t.WorkerID)
+		boxWidth := 22
+		if len(nodeLabel)+2 > boxWidth {
+			boxWidth = len(nodeLabel) + 4
+		}
+
+		border := "+" + strings.Repeat("-", boxWidth-2) + "+"
+		sb.WriteString(border + "\n")
+		
+		content := nodeLabel
+		if t.IsRevision != nil && *t.IsRevision {
+			content += " [REV]"
+		}
+		
+		leftPad := (boxWidth - 2 - len(content)) / 2
+		rightPad := boxWidth - 2 - len(content) - leftPad
+		sb.WriteString(fmt.Sprintf("|%s%s%s|\n", strings.Repeat(" ", leftPad), content, strings.Repeat(" ", rightPad)))
+		sb.WriteString(border + "\n")
+
+		// Annotations (Branch/Revision)
+		if t.BranchFromThought != nil {
+			sb.WriteString(fmt.Sprintf("  ^-- [Branch from T%d", *t.BranchFromThought))
+			if t.BranchID != nil {
+				sb.WriteString(fmt.Sprintf(", ID: %s", *t.BranchID))
+			}
+			sb.WriteString("]\n")
+		}
+		if t.IsRevision != nil && *t.IsRevision && t.RevisesThought != nil {
+			sb.WriteString(fmt.Sprintf("  ^-- [Revises T%d]\n", *t.RevisesThought))
+		}
+
+		// Arrow to next
+		if i < len(s.thoughtHistory)-1 {
+			sb.WriteString("        |\n")
+			sb.WriteString("        v\n")
+		}
+	}
+
+	sb.WriteString("\n=========================\n")
+	sb.WriteString("```")
+	return sb.String()
 }

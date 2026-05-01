@@ -14,6 +14,8 @@ A high-performance Sequential Thinking MCP server with **GPT (Gather, Process, T
   - `security`: Focuses on threat modeling and defense-in-depth.
   - `custom-name`: (e.g., `refactor`, `performance`) Provides dynamic guidance for any alphanumeric track name (up to 32 characters).
 - **LLM-Powered Synthesis**: Dynamically synthesizes multiple worker perspectives into a single, high-fidelity "Super Idea" using track-specific strategic prompts. Custom tracks receive generalized high-quality engineering guidance.
+- **Context-Aware Thinking**: Allows injecting repository-specific context (e.g., tool discovery, environment info, or code patterns) into the thinking process via the `context` parameter, ensuring grounded and relevant reasoning.
+- **Visual Thinking (Markdown Flowchart)**: Generates a markdown-native ASCII flowchart of the thinking process (phases, workers, branches, and revisions). This is an **opt-in** feature designed for troubleshooting and performance analysis without requiring external tools.
 - **Shared Memory**: Uses `/dev/shm` to share thoughts between workers in the Gather phase, enabling the synthesis of a "Super Idea".
 - **Dynamic Thinking**: Adjust total thoughts, branch, and revise as understanding deepens.
 - **Interactive Logging**: Beautifully formatted console output with phase and worker identification.
@@ -115,6 +117,8 @@ The primary tool for the thinking process.
 - `branchFromThought` (int): The thought number to branch from.
 - `branchId` (string): Unique ID for the branch.
 - `track` (string): The thinking track to use (e.g., `bug-fix`, `feature`, `security`, or a custom name like `refactor`).
+- `context` (string): Repository-specific context or environmental information to ground the thinking.
+- `generateDiagram` (bool): Set to `true` to generate a markdown-native ASCII flowchart in the response (opt-in).
 
 ### `reset_thinking`
 Resets the thinking session and clears all shared memory in `/dev/shm`.
@@ -139,6 +143,43 @@ Resets the thinking session and clears all shared memory in `/dev/shm`.
 
 3. **Test Phase**:
    - Worker 1: `{"thought": "Verifying implementation...", "phase": "test", "workerId": 1}`
+### Visualizing the Thinking Process
+To generate a markdown-native ASCII flowchart for troubleshooting or analysis, set `generateDiagram` to `true` in any thinking step (usually the final one).
+
+#### Natural Language Triggers
+Since DeepThinking-NG is used by LLM agents, you can simply ask the agent to show the diagram using natural language:
+- *"Show me the thinking flowchart."*
+- *"Use deepthinking with diagram."*
+- *"I want to see the thinking path."*
+
+The agent will interpret your request and automatically set the `generateDiagram: true` flag in the next tool call.
+
+- **Request**:
+...
+
+  ```json
+  {
+    "thought": "Finalizing and generating report...",
+    "phase": "test",
+    "generateDiagram": true
+  }
+  ```
+- **Response**:
+  Returns a `flowchart` field containing a markdown-native ASCII diagram:
+  ```text
+  🧠 DEEPTHINKING FLOWCHART
+  =========================
+
+  --- GATHER PHASE ---
+  +--------------------+
+  |      T1 (W1)       |
+  +--------------------+
+          |
+          v
+  +--------------------+
+  |      T2 (W2)       |
+  +--------------------+
+  ```
 
 ---
 *Developed with ❤️ for Dad.*

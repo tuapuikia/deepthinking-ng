@@ -2,9 +2,8 @@ package main
 
 import (
 	"fmt"
-
 	"os"
-
+	"strings"
 	"testing"
 )
 
@@ -424,5 +423,156 @@ func TestMCPSessionConsistency(t *testing.T) {
 
 	if respTest.SessionID != sessionID {
 		t.Fatalf("Session ID mismatch in test phase! Expected %s, got %s", sessionID, respTest.SessionID)
+	}
+}
+
+func TestContextAwareThinking(t *testing.T) {
+	server := NewSequentialThinkingServer(2, "")
+	defer os.RemoveAll(server.shm.shmPath)
+	server.shm.ClearAll()
+	server.thoughtHistory = nil
+
+	track := "security"
+	context1 := "Discovered tool: osvScanner"
+	context2 := "Environment: Linux"
+
+	// Worker 1
+	resp1, err := server.ProcessThought(ThoughtData{
+		Thought:             "Worker 1 analysis",
+		Phase:               "gather",
+		WorkerID:            1,
+		ThinkingWorkerCount: 2,
+		Track:               track,
+		Context:             context1,
+		NextThoughtNeeded:   true,
+	})
+	if err != nil {
+		t.Fatalf("Worker 1 failed: %v", err)
+	}
+	if resp1.Track != track {
+		t.Errorf("Expected track %s, got %s", track, resp1.Track)
+	}
+	if resp1.Context != context1 {
+		t.Errorf("Expected context %s, got %s", context1, resp1.Context)
+	}
+
+	// Worker 2
+	resp2, err := server.ProcessThought(ThoughtData{
+		Thought:             "Worker 2 analysis",
+		Phase:               "gather",
+		WorkerID:            2,
+		ThinkingWorkerCount: 2,
+		Track:               track,
+		Context:             context2,
+		NextThoughtNeeded:   true,
+	})
+	if err != nil {
+		t.Fatalf("Worker 2 failed: %v", err)
+	}
+
+	// Verify SuperIdea synthesis
+	if resp2.Status != "all_workers_finished" {
+		t.Errorf("Expected all_workers_finished, got %s", resp2.Status)
+	}
+	if !strings.Contains(strings.ToUpper(resp2.SuperIdea), "TRACK: SECURITY") {
+		t.Error("SuperIdea missing track info")
+	}
+	if !strings.Contains(resp2.SuperIdea, context1) || !strings.Contains(resp2.SuperIdea, context2) {
+		t.Error("SuperIdea missing combined context info")
+	}
+	if !strings.Contains(resp2.SuperIdea, "As this is a 'SECURITY' track") {
+		t.Error("SuperIdea missing track-specific instructions")
+	}
+}
+
+func TestValidateTrack(t *testing.T) {
+	tests := []struct {
+		track   string
+		wantErr bool
+	}{
+		{"", false},
+		{"bug-fix", false},
+		{"feature_123", false},
+		{"Security-Track", false},
+		{"invalid track!", true},
+		{"this_track_name_is_way_too_long_for_the_regex_to_allow", true},
+	}
+
+	for _, tt := range tests {
+		err := validateTrack(tt.track)
+		if (err != nil) != tt.wantErr {
+			t.Errorf("validateTrack(%q) error = %v, wantErr %v", tt.track, err, tt.wantErr)
+		}
+	}
+}
+
+func TestMarkdownFlowchartGeneration(t *testing.T) {
+	server := NewSequentialThinkingServer(1, "")
+	defer os.RemoveAll(server.shm.shmPath)
+	server.shm.ClearAll()
+	server.thoughtHistory = nil
+
+	// 1. Gather
+	server.ProcessThought(ThoughtData{
+		Thought:           "Gather 1",
+		Phase:             "gather",
+		WorkerID:          1,
+		NextThoughtNeeded: true,
+	})
+
+	// 2. Process
+	server.ProcessThought(ThoughtData{
+		Thought:           "Process 1",
+		Phase:             "process",
+		WorkerID:          1,
+		NextThoughtNeeded: true,
+	})
+
+	// 3. Test with Diagram Request
+	resp, err := server.ProcessThought(ThoughtData{
+		Thought:           "Test 1",
+		Phase:             "test",
+		WorkerID:          1,
+		GenerateDiagram:   true,
+		NextThoughtNeeded: false,
+	})
+
+	if err != nil {
+		t.Fatalf("ProcessThought failed: %v", err)
+	}
+
+	if resp.Flowchart == "" {
+		t.Error("Expected Flowchart, got empty string")
+	}
+
+	expectedKeywords := []string{"```text", "DEEPTHINKING FLOWCHART", "--- GATHER PHASE ---", "--- PROCESS PHASE ---", "--- TEST PHASE ---", "T1 (W1)", "T2 (W1)", "T3 (W1)", "+--------------------+", "|"}
+	for _, kw := range expectedKeywords {
+		if !strings.Contains(resp.Flowchart, kw) {
+			t.Errorf("Flowchart missing keyword: %s", kw)
+		}
+	}
+}
+
+func TestSuperIdeaSynthesisHint(t *testing.T) {
+	server := NewSequentialThinkingServer(1, "")
+	defer os.RemoveAll(server.shm.shmPath)
+	server.shm.ClearAll()
+	server.thoughtHistory = nil
+
+	// Submit a gather thought to trigger synthesis (worker count is 1)
+	resp, err := server.ProcessThought(ThoughtData{
+		Thought:             "Gathering info",
+		Phase:               "gather",
+		WorkerID:            1,
+		ThinkingWorkerCount: 1,
+		NextThoughtNeeded:   true,
+	})
+
+	if err != nil {
+		t.Fatalf("ProcessThought failed: %v", err)
+	}
+
+	if !strings.Contains(resp.SuperIdea, "💡 TIP: If you want to visualize this thinking path") {
+		t.Error("SuperIdea missing the diagram visualization tip")
 	}
 }

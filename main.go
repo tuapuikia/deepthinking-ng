@@ -35,6 +35,7 @@ This tool helps analyze problems through a flexible thinking process that can ad
 
 GPT Workflow:
 - G (Gather): Multiple workers (default 5) generate different solutions. You MUST use this phase to explore at least 5 different perspectives before moving to 'process'.
+  * AGENTIC DISCOVERY: In this phase, you should proactively use your available tools (e.g., filesystem tools, search tools, or other MCP tools) to gather context and ground your perspectives.
 - P (Process): A single worker processes the chosen solution.
 - T (Test): A single worker tests and verifies the result.
 
@@ -53,7 +54,8 @@ Parameters:
 - revisesThought: Which thought number is being reconsidered.
 - branchFromThought: Which thought number is the branching point.
 - branchId: Identifier for the current branch.
-- needsMoreThoughts: If reaching end but realizing more thoughts needed.`,
+- needsMoreThoughts: If reaching end but realizing more thoughts needed.
+- context: (Optional) Discovered tools, environment details, or filesystem context to ground the thinking.`,
 		InputSchema: struct {
 			Type       string         `json:"type"`
 			Properties map[string]any `json:"properties,omitempty"`
@@ -113,6 +115,10 @@ Parameters:
 				"track": map[string]any{
 					"type":        "string",
 					"description": "The thinking track to use (e.g., 'bug-fix', 'feature', 'security')",
+				},
+				"context": map[string]any{
+					"type":        "string",
+					"description": "Discovered tools, environment details, or filesystem context to ground the thinking",
 				},
 			},
 			Required: []string{"thought", "thoughtNumber", "totalThoughts", "nextThoughtNeeded"},
