@@ -617,14 +617,39 @@ func TestSecurityFeatures(t *testing.T) {
 		server.shm.ClearAll()
 		server.thoughtHistory = nil
 
+		// Test baseline (short thought)
 		resp, _ := server.ProcessThought(ThoughtData{
-			Thought:           "I need to refactor the entire system architecture to improve performance.",
+			Thought:           "Short thought.",
 			ThoughtNumber:     1,
 			NextThoughtNeeded: true,
 		})
+		if resp.SuggestedWorkerCount != 5 {
+			t.Errorf("Expected SuggestedWorkerCount 5 for short task, got %d", resp.SuggestedWorkerCount)
+		}
 
+		// Test incremental scaling (700 chars)
+		// Use non-hex characters to avoid redaction
+		longThought := strings.Repeat("z", 700)
+		resp, _ = server.ProcessThought(ThoughtData{
+			Thought:           longThought,
+			ThoughtNumber:     1,
+			NextThoughtNeeded: true,
+		})
+		// 6 + (700-500)/200 = 7
+		if resp.SuggestedWorkerCount != 7 {
+			t.Errorf("Expected SuggestedWorkerCount 7 for 700 char task, got %d", resp.SuggestedWorkerCount)
+		}
+
+		// Test max scaling (1300 chars)
+		veryLongThought := strings.Repeat("z", 1300)
+		resp, _ = server.ProcessThought(ThoughtData{
+			Thought:           veryLongThought,
+			ThoughtNumber:     1,
+			NextThoughtNeeded: true,
+		})
+		// 6 + (1300-500)/200 = 10
 		if resp.SuggestedWorkerCount != 10 {
-			t.Errorf("Expected SuggestedWorkerCount 10 for complex task, got %d", resp.SuggestedWorkerCount)
+			t.Errorf("Expected SuggestedWorkerCount 10 for 1300 char task, got %d", resp.SuggestedWorkerCount)
 		}
 	})
 

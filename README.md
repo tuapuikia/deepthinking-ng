@@ -8,6 +8,7 @@ A high-performance Sequential Thinking MCP server with **GPT (Gather, Process, T
   - **Gather (G)**: Multiple workers (default 5) generate diverse solutions.
   - **Process (P)**: A single worker implements the chosen solution.
   - **Test (T)**: A single worker verifies the result.
+  - **Strict Enforcement**: The server enforces the logical flow (Gather -> Process -> Test) to ensure architectural integrity.
 - **Thinking Tracks**: Specialized modes that provide tailored guidance for different engineering tasks. You can use the built-in tracks or define your own **custom track** directly in the prompt:
   - `bug-fix`: Focuses on root cause isolation and regression prevention.
   - `feature`: Focuses on scalability and architectural alignment.
@@ -15,9 +16,12 @@ A high-performance Sequential Thinking MCP server with **GPT (Gather, Process, T
   - `custom-name`: (e.g., `refactor`, `performance`) Provides dynamic guidance for any alphanumeric track name (up to 32 characters).
 - **LLM-Powered Synthesis**: Dynamically synthesizes multiple worker perspectives into a single, high-fidelity "Super Idea" using track-specific strategic prompts. Custom tracks receive generalized high-quality engineering guidance.
 - **Context-Aware Thinking**: Allows injecting repository-specific context (e.g., tool discovery, environment info, or code patterns) into the thinking process via the `context` parameter, ensuring grounded and relevant reasoning.
-- **Visual Thinking (Markdown Flowchart)**: Generates a markdown-native ASCII flowchart of the thinking process (phases, workers, branches, and revisions). This is an **opt-in** feature designed for troubleshooting and performance analysis without requiring external tools.
-- **Shared Memory**: Uses `/dev/shm` to share thoughts between workers in the Gather phase, enabling the synthesis of a "Super Idea".
-- **Dynamic Thinking**: Adjust total thoughts, branch, and revise as understanding deepens.
+- **Visual Thinking (Markdown Flowchart)**: Generates a markdown-native ASCII flowchart of the thinking process. This is **enabled by default** and automatically saved to `deepthinking-flow.md` for persistent review.
+- **Cross-Platform Shared Memory**: High-performance coordination between workers using volatile storage:
+  - **Linux**: `/dev/shm` (RAM-based)
+  - **macOS**: `/tmp` or `/private/tmp`
+  - **Windows**: `%TEMP%`
+- **Dynamic Scaling**: Suggests an optimal worker count based on task length (incremental scaling) and LLM-driven assessment of complexity. The server provides a structural suggestion that ramps up as the prompt length increases.
 - **Interactive Logging**: Beautifully formatted console output with phase and worker identification.
 
 ## Security & Privacy
@@ -32,7 +36,7 @@ The server implements **Deep Redaction** at the entry point:
 - **Supported Patterns**: GitHub tokens, OpenAI keys, AWS IDs, Google API keys, Slack tokens, and Private Keys (RSA/Generic).
 
 ### Shared Memory Security
-- **Strict Path Enforcement**: The `SHM_ROOT` is strictly restricted to `/dev/shm` or its subdirectories. Any attempt to use paths outside of `/dev/shm` will result in a fallback to the default safe path.
+- **Strict Path Enforcement**: The `SHM_ROOT` is strictly restricted to volatile storage areas (e.g., `/dev/shm` on Linux, `/tmp` on macOS, or `%TEMP%` on Windows). Any attempt to use paths outside these areas will result in a fallback to the default safe path for the current OS.
 - **Restrictive Permissions**: All directories and files created in shared memory use restrictive permissions (`0700` for directories, `0600` for files), ensuring only the user running the server can access them.
 - **Session Isolation**: Each session is isolated into its own subdirectory using a random UUID to prevent cross-session data leakage.
 
@@ -80,14 +84,21 @@ Add the following to your `gemini-cli` configuration (usually in `~/.gemini/conf
 
 ## Configuration Options
 
-You can configure the server using environment variables:
+You can configure the server using environment variables or command-line flags:
 
-| Environment Variable | Description | Default |
-|----------------------|-------------|---------|
-| `THINKING_WORKER_COUNT` | Number of workers for the Gather phase. | `5` |
-| `SHM_ROOT` | Root directory for shared memory storage. | `/dev/shm/deepthinking-ng` |
-| `GEMINI_SESSION_ID` | Unique ID for the session to isolate shared memory. | `<Random UUID>` |
-| `DISABLE_THOUGHT_LOGGING` | Set to `true` to disable console logging of thoughts. | `false` |
+| Environment Variable | Flag | Description | Default |
+|----------------------|------|-------------|---------|
+| `THINKING_WORKER_COUNT` | `-thinking-worker` | Number of workers for the Gather phase. | `5` |
+| `MAX_THINKING_WORKER_COUNT` | `-max-thinking-worker` | Maximum allowed workers for the Gather phase. | `10` |
+| `SHM_ROOT` | `-shm-root` | Root directory for shared memory storage. | OS-specific |
+| `DISABLE_DIAGRAM` | `-disable-diagram` | Set to `true` to disable flowchart generation by default. | `false` |
+| `GEMINI_SESSION_ID` | N/A | Unique ID for the session to isolate shared memory. | `<Random UUID>` |
+| `DISABLE_THOUGHT_LOGGING` | N/A | Set to `true` to disable console logging of thoughts. | `false` |
+
+### OS-Specific Defaults for `SHM_ROOT`
+- **Linux**: `/dev/shm/deepthinking-ng`
+- **macOS**: `/tmp/deepthinking-ng`
+- **Windows**: `%TEMP%\deepthinking-ng`
 
 ## Session Isolation
 
@@ -118,10 +129,13 @@ The primary tool for the thinking process.
 - `branchId` (string): Unique ID for the branch.
 - `track` (string): The thinking track to use (e.g., `bug-fix`, `feature`, `security`, or a custom name like `refactor`).
 - `context` (string): Repository-specific context or environmental information to ground the thinking.
-- `generateDiagram` (bool): Set to `true` to generate a markdown-native ASCII flowchart in the response (opt-in).
+- `generateDiagram` (bool): Set to `true` to generate a markdown-native ASCII flowchart in the response. **Enabled by default** unless disabled via server config.
+- `isPrivate` (bool): **Zero-Knowledge**: If true, this thought will be redacted from the final synthesis and allWorkerThoughts.
+- `isTainted` (bool): **Taint Analysis**: Mark this thought as untrusted (e.g., if it contains data from an unverified source).
+- `complexity` (string): Optional metadata about the task complexity to help with dynamic scaling suggestions.
 
 ### `reset_thinking`
-Resets the thinking session and clears all shared memory in `/dev/shm`.
+Resets the thinking session and clears all shared memory.
 
 ## GPT Workflow Example
 
@@ -143,8 +157,9 @@ Resets the thinking session and clears all shared memory in `/dev/shm`.
 
 3. **Test Phase**:
    - Worker 1: `{"thought": "Verifying implementation...", "phase": "test", "workerId": 1}`
+
 ### Visualizing the Thinking Process
-To generate a markdown-native ASCII flowchart for troubleshooting or analysis, set `generateDiagram` to `true` in any thinking step (usually the final one).
+DeepThinking-NG generates a markdown-native ASCII flowchart for troubleshooting or analysis. This is **enabled by default** and saved to `deepthinking-flow.md`.
 
 #### Natural Language Triggers
 Since DeepThinking-NG is used by LLM agents, you can simply ask the agent to show the diagram using natural language:
@@ -152,11 +167,9 @@ Since DeepThinking-NG is used by LLM agents, you can simply ask the agent to sho
 - *"Use deepthinking with diagram."*
 - *"I want to see the thinking path."*
 
-The agent will interpret your request and automatically set the `generateDiagram: true` flag in the next tool call.
+The agent will interpret your request and ensure the `generateDiagram` flag is respected (or use the default).
 
 - **Request**:
-...
-
   ```json
   {
     "thought": "Finalizing and generating report...",

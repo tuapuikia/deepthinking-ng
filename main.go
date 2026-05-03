@@ -56,6 +56,9 @@ CRITICAL RULES:
 Shared Memory:
 Uses /dev/shm to share thoughts between workers during the Gather phase to synthesize a "Super Idea".
 
+DYNAMIC SCALING:
+For complex problems (e.g., architectural design, complex debugging, advanced mathematics, or physics), you are encouraged to increase the 'thinkingWorkerCount' (up to 10) during the 'gather' phase to explore a wider range of perspectives. Use your own judgment to assess the difficulty of the task.
+
 Parameters:
 - thought: Your current thinking step.
 - nextThoughtNeeded: True if you need more thinking.

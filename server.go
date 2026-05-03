@@ -399,12 +399,11 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 
 	// Dynamic Scaling Suggestion
 	if input.ThoughtNumber == 1 {
-		lowerThought := strings.ToLower(input.Thought)
 		suggested := 5
-		if len(input.Thought) > 1000 || strings.Contains(lowerThought, "architect") || strings.Contains(lowerThought, "refactor") || strings.Contains(lowerThought, "complex") {
-			suggested = 10
-		} else if len(input.Thought) > 500 || strings.Contains(lowerThought, "security") || strings.Contains(lowerThought, "performance") {
-			suggested = 7
+		length := len(input.Thought)
+		if length > 500 {
+			// Incremental scaling: +1 worker for every 200 characters above 500
+			suggested = 6 + (length-500)/200
 		}
 
 		if suggested > s.maxWorkerCount {
