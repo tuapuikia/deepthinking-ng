@@ -52,8 +52,8 @@ func isPathSafe(path string) bool {
 func generateSessionID() string {
 	bytes := make([]byte, 16)
 	if _, err := rand.Read(bytes); err != nil {
-		// Fallback to timestamp if randomness fails
-		return fmt.Sprintf("fallback_%d", os.Getpid())
+		// Fallback to timestamp + pid if randomness fails
+		return fmt.Sprintf("fallback_%d_%d", os.Getpid(), os.Getppid())
 	}
 	return hex.EncodeToString(bytes)
 }

@@ -9,7 +9,7 @@ import (
 )
 
 func TestSequentialThinking(t *testing.T) {
-	server := NewSequentialThinkingServer(0, "", false)
+	server := NewSequentialThinkingServer(0, 10, "", false)
 	defer os.RemoveAll(server.shm.shmPath)
 	// Ensure we start fresh
 	server.shm.ClearAll()
@@ -222,7 +222,7 @@ func TestSequentialThinking(t *testing.T) {
 }
 
 func TestResetThinking(t *testing.T) {
-	server := NewSequentialThinkingServer(0, "", false)
+	server := NewSequentialThinkingServer(0, 10, "", false)
 	defer os.RemoveAll(server.shm.shmPath)
 	nextNeeded := true
 	server.ProcessThought(ThoughtData{Thought: "Test", NextThoughtNeeded: nextNeeded})
@@ -242,7 +242,7 @@ func TestResetThinking(t *testing.T) {
 }
 
 func TestMultipleThoughtsPerWorker(t *testing.T) {
-	server := NewSequentialThinkingServer(0, "", false)
+	server := NewSequentialThinkingServer(0, 10, "", false)
 	defer os.RemoveAll(server.shm.shmPath)
 	server.shm.ClearAll()
 	server.thoughtHistory = nil
@@ -298,7 +298,7 @@ func TestMultipleThoughtsPerWorker(t *testing.T) {
 }
 
 func TestProcessPhaseTransition(t *testing.T) {
-	server := NewSequentialThinkingServer(0, "", false)
+	server := NewSequentialThinkingServer(0, 10, "", false)
 	defer os.RemoveAll(server.shm.shmPath)
 	server.shm.ClearAll()
 	server.thoughtHistory = nil
@@ -360,7 +360,7 @@ func TestProcessPhaseTransition(t *testing.T) {
 
 func TestMCPSessionConsistency(t *testing.T) {
 	// This simulates exactly how main.go initializes the server once at boot
-	server := NewSequentialThinkingServer(0, "", false)
+	server := NewSequentialThinkingServer(0, 10, "", false)
 	server.shm.ClearAll()
 	server.thoughtHistory = nil
 
@@ -428,7 +428,7 @@ func TestMCPSessionConsistency(t *testing.T) {
 }
 
 func TestContextAwareThinking(t *testing.T) {
-	server := NewSequentialThinkingServer(2, "", false)
+	server := NewSequentialThinkingServer(2, 10, "", false)
 	defer os.RemoveAll(server.shm.shmPath)
 	server.shm.ClearAll()
 	server.thoughtHistory = nil
@@ -508,7 +508,7 @@ func TestValidateTrack(t *testing.T) {
 }
 
 func TestMarkdownFlowchartGeneration(t *testing.T) {
-	server := NewSequentialThinkingServer(1, "", false)
+	server := NewSequentialThinkingServer(1, 10, "", false)
 	defer os.RemoveAll(server.shm.shmPath)
 	server.shm.ClearAll()
 	server.thoughtHistory = nil
@@ -547,7 +547,7 @@ func TestMarkdownFlowchartGeneration(t *testing.T) {
 		t.Error("Expected Flowchart, got empty string")
 	}
 
-	expectedKeywords := []string{"```text", "DEEPTHINKING FLOWCHART", "--- GATHER PHASE ---", "--- PROCESS PHASE ---", "--- TEST PHASE ---", "T1 (W1)", "T2 (W1)", "T3 (W1)", "+--------------------+", "|"}
+	expectedKeywords := []string{"```text", "DEEPTHINKING FLOWCHART", "--- GATHER PHASE ---", "--- PROCESS PHASE ---", "--- TEST PHASE ---", "T1 (W1)", "T2 (W1)", "T3 (W1)", "+----------------------------------------------------------+", "|"}
 	for _, kw := range expectedKeywords {
 		if !strings.Contains(resp.Flowchart, kw) {
 			t.Errorf("Flowchart missing keyword: %s", kw)
@@ -555,8 +555,113 @@ func TestMarkdownFlowchartGeneration(t *testing.T) {
 	}
 }
 
+func TestSecurityFeatures(t *testing.T) {
+	server := NewSequentialThinkingServer(1, 10, "", false)
+	defer os.RemoveAll(server.shm.shmPath)
+	server.shm.ClearAll()
+	server.thoughtHistory = nil
+
+	t.Run("Taint Propagation", func(t *testing.T) {
+		// 1. Tainted thought
+		resp, _ := server.ProcessThought(ThoughtData{
+			Thought:           "Untrusted input",
+			IsTainted:         true,
+			NextThoughtNeeded: true,
+		})
+		if !resp.IsTainted {
+			t.Error("Expected response to be tainted")
+		}
+
+		// 2. Subsequent thought should be tainted
+		resp, _ = server.ProcessThought(ThoughtData{
+			Thought:           "Derived thought",
+			NextThoughtNeeded: true,
+		})
+		if !resp.IsTainted {
+			t.Error("Expected subsequent response to be tainted")
+		}
+	})
+
+	t.Run("Zero-Knowledge Synthesis", func(t *testing.T) {
+		server.shm.ClearAll()
+		server.thoughtHistory = nil
+
+		// 1. Private thought
+		server.ProcessThought(ThoughtData{
+			Thought:             "Secret internal logic",
+			Phase:               "gather",
+			WorkerID:            1,
+			IsPrivate:           true,
+			ThinkingWorkerCount: 1,
+			NextThoughtNeeded:   true,
+		})
+
+		// 2. Synthesis should redact it
+		resp, _ := server.ProcessThought(ThoughtData{
+			Thought:             "Final gather",
+			Phase:               "gather",
+			WorkerID:            1,
+			ThinkingWorkerCount: 1,
+			NextThoughtNeeded:   true,
+		})
+
+		if strings.Contains(resp.SuperIdea, "Secret internal logic") {
+			t.Error("Private thought was not redacted from SuperIdea")
+		}
+		if !strings.Contains(resp.SuperIdea, "[PRIVATE THOUGHT - REDACTED FOR SECURITY]") {
+			t.Error("Private thought placeholder missing from SuperIdea")
+		}
+	})
+
+	t.Run("Dynamic Scaling Suggestion", func(t *testing.T) {
+		server.shm.ClearAll()
+		server.thoughtHistory = nil
+
+		resp, _ := server.ProcessThought(ThoughtData{
+			Thought:           "I need to refactor the entire system architecture to improve performance.",
+			ThoughtNumber:     1,
+			NextThoughtNeeded: true,
+		})
+
+		if resp.SuggestedWorkerCount != 10 {
+			t.Errorf("Expected SuggestedWorkerCount 10 for complex task, got %d", resp.SuggestedWorkerCount)
+		}
+	})
+
+	t.Run("Max Worker Limit Enforcement", func(t *testing.T) {
+		// Create server with max 3 workers
+		serverMax := NewSequentialThinkingServer(1, 3, "", false)
+		defer os.RemoveAll(serverMax.shm.shmPath)
+		serverMax.shm.ClearAll()
+
+		// 1. Test input capping
+		resp, _ := serverMax.ProcessThought(ThoughtData{
+			Thought:             "Test",
+			ThinkingWorkerCount: 5, // Exceeds max
+			NextThoughtNeeded:   true,
+		})
+
+		// We need to check the internal state or the status message
+		// The status message for gather phase shows (1/ThinkingWorkerCount)
+		if !strings.Contains(resp.Status, "(1/3)") {
+			t.Errorf("Expected status to show cap at 3 workers, got %s", resp.Status)
+		}
+
+		// 2. Test suggestion capping
+		resp2, _ := serverMax.ProcessThought(ThoughtData{
+			Thought:           "I need to refactor the entire system architecture to improve performance.",
+			ThoughtNumber:     1,
+			NextThoughtNeeded: true,
+		})
+
+		if resp2.SuggestedWorkerCount > 3 {
+			t.Errorf("Expected SuggestedWorkerCount to be capped at 3, got %d", resp2.SuggestedWorkerCount)
+		}
+	})
+}
+
 func TestFlowchartFileSaving(t *testing.T) {
-	server := NewSequentialThinkingServer(1, "", true) // Enable diagram by default
+	server := NewSequentialThinkingServer(1, 10, "", true) // Enable diagram by default
 	defer os.RemoveAll(server.shm.shmPath)
 	server.shm.ClearAll()
 	server.thoughtHistory = nil
@@ -585,7 +690,7 @@ func TestFlowchartFileSaving(t *testing.T) {
 	os.WriteFile("deepthinking-flow.md", []byte("dummy"), 0644)
 	defer os.Remove("deepthinking-flow.md")
 
-	server2 := NewSequentialThinkingServer(1, "", true)
+	server2 := NewSequentialThinkingServer(1, 10, "", true)
 	server2.ProcessThought(ThoughtData{
 		Thought:           "Thought 2",
 		Phase:             "gather",
@@ -602,7 +707,7 @@ func TestFlowchartFileSaving(t *testing.T) {
 	os.WriteFile("deepthinking-1-flow.md", []byte("dummy"), 0644)
 	defer os.Remove("deepthinking-1-flow.md")
 
-	server3 := NewSequentialThinkingServer(1, "", true)
+	server3 := NewSequentialThinkingServer(1, 10, "", true)
 	server3.ProcessThought(ThoughtData{
 		Thought:           "Thought 3",
 		Phase:             "gather",
@@ -617,7 +722,7 @@ func TestFlowchartFileSaving(t *testing.T) {
 }
 
 func TestRedaction(t *testing.T) {
-	server := NewSequentialThinkingServer(0, "", false)
+	server := NewSequentialThinkingServer(0, 10, "", false)
 	defer os.RemoveAll(server.shm.shmPath)
 
 	t.Run("Redact Thought and Context", func(t *testing.T) {
@@ -654,7 +759,7 @@ func TestRedaction(t *testing.T) {
 }
 
 func TestSuperIdeaSynthesisHint(t *testing.T) {
-	server := NewSequentialThinkingServer(1, "", false)
+	server := NewSequentialThinkingServer(1, 10, "", false)
 	defer os.RemoveAll(server.shm.shmPath)
 	server.shm.ClearAll()
 	server.thoughtHistory = nil

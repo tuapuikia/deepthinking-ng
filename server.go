@@ -63,6 +63,11 @@ type ThoughtData struct {
 	Track               string `json:"track,omitempty"`               // "bug-fix", "feature", "security", etc.
 	Context             string `json:"context,omitempty"`             // Discovered tools, environment, etc.
 	GenerateDiagram     *bool  `json:"generateDiagram,omitempty"`     // Opt-in flag for Mermaid diagram
+
+	// Security & Performance fields
+	IsPrivate  bool   `json:"isPrivate,omitempty"`  // Zero-Knowledge: Redact from synthesis
+	IsTainted  bool   `json:"isTainted,omitempty"`  // Taint Analysis: Mark as untrusted
+	Complexity string `json:"complexity,omitempty"` // Metadata for dynamic scaling
 }
 
 // ThoughtResponse represents the structured output of a thinking step.
@@ -82,6 +87,10 @@ type ThoughtResponse struct {
 	Track             string   `json:"track,omitempty"`
 	Context           string   `json:"context,omitempty"`
 	Flowchart         string   `json:"flowchart,omitempty"` // Markdown-native ASCII flowchart
+
+	// Security & Performance response fields
+	IsTainted            bool `json:"isTainted,omitempty"`
+	SuggestedWorkerCount int  `json:"suggestedWorkerCount,omitempty"`
 }
 
 // SequentialThinkingServer manages the state of the thinking process.
@@ -91,13 +100,14 @@ type SequentialThinkingServer struct {
 	branches              map[string][]ThoughtData
 	disableThoughtLogging bool
 	defaultWorkerCount    int
+	maxWorkerCount        int
 	defaultEnableDiagram  bool
 	currentFlowchartFile  string
 	shm                   *SharedMemoryManager
 }
 
 // NewSequentialThinkingServer creates a new instance of the server.
-func NewSequentialThinkingServer(workerCount int, shmRoot string, defaultEnableDiagram bool) *SequentialThinkingServer {
+func NewSequentialThinkingServer(workerCount int, maxWorkerCount int, shmRoot string, defaultEnableDiagram bool) *SequentialThinkingServer {
 	disableLogging := strings.ToLower(os.Getenv("DISABLE_THOUGHT_LOGGING")) == "true"
 
 	if workerCount <= 0 {
@@ -107,11 +117,24 @@ func NewSequentialThinkingServer(workerCount int, shmRoot string, defaultEnableD
 		}
 	}
 
+	if maxWorkerCount <= 0 {
+		maxWorkerCount = 10
+		if val := os.Getenv("MAX_THINKING_WORKER_COUNT"); val != "" {
+			fmt.Sscanf(val, "%d", &maxWorkerCount)
+		}
+	}
+
+	// Ensure default doesn't exceed max
+	if workerCount > maxWorkerCount {
+		workerCount = maxWorkerCount
+	}
+
 	return &SequentialThinkingServer{
 		thoughtHistory:        make([]ThoughtData, 0),
 		branches:              make(map[string][]ThoughtData),
 		disableThoughtLogging: disableLogging,
 		defaultWorkerCount:    workerCount,
+		maxWorkerCount:        maxWorkerCount,
 		defaultEnableDiagram:  defaultEnableDiagram,
 		shm:                   NewSharedMemoryManager(shmRoot),
 	}
@@ -204,6 +227,15 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// DoS Protection: Limit input sizes
+	const maxInputSize = 100 * 1024 // 100KB
+	if len(input.Thought) > maxInputSize {
+		return ThoughtResponse{}, fmt.Errorf("thought exceeds maximum size of %d bytes", maxInputSize)
+	}
+	if len(input.Context) > maxInputSize {
+		return ThoughtResponse{}, fmt.Errorf("context exceeds maximum size of %d bytes", maxInputSize)
+	}
+
 	// Deep Redaction: Redact secrets at the entry point to prevent storage in memory/disk
 	// and to prevent sending them back to the LLM in the synthesis phase.
 	input.Thought = redact(input.Thought)
@@ -274,6 +306,9 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 
 	if input.ThinkingWorkerCount == 0 {
 		input.ThinkingWorkerCount = s.defaultWorkerCount
+	}
+	if input.ThinkingWorkerCount > s.maxWorkerCount {
+		input.ThinkingWorkerCount = s.maxWorkerCount
 	}
 	if input.WorkerID == 0 {
 		input.WorkerID = 1
@@ -350,6 +385,34 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 		Context:              input.Context,
 	}
 
+	// Taint Propagation
+	isTainted := input.IsTainted
+	if !isTainted {
+		for _, t := range s.thoughtHistory {
+			if t.IsTainted {
+				isTainted = true
+				break
+			}
+		}
+	}
+	resp.IsTainted = isTainted
+
+	// Dynamic Scaling Suggestion
+	if input.ThoughtNumber == 1 {
+		lowerThought := strings.ToLower(input.Thought)
+		suggested := 5
+		if len(input.Thought) > 1000 || strings.Contains(lowerThought, "architect") || strings.Contains(lowerThought, "refactor") || strings.Contains(lowerThought, "complex") {
+			suggested = 10
+		} else if len(input.Thought) > 500 || strings.Contains(lowerThought, "security") || strings.Contains(lowerThought, "performance") {
+			suggested = 7
+		}
+
+		if suggested > s.maxWorkerCount {
+			suggested = s.maxWorkerCount
+		}
+		resp.SuggestedWorkerCount = suggested
+	}
+
 	// Generate Markdown flowchart if requested or enabled by default
 	shouldGenerateDiagram := s.defaultEnableDiagram
 	if input.GenerateDiagram != nil {
@@ -369,13 +432,17 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 			var allThoughts []string
 			var combinedContext []string
 			for _, t := range thoughts {
-				allThoughts = append(allThoughts, fmt.Sprintf("Worker %d: %s", t.WorkerID, t.Thought))
+				thoughtText := t.Thought
+				if t.IsPrivate {
+					thoughtText = "[PRIVATE THOUGHT - REDACTED FOR SECURITY]"
+				}
+				allThoughts = append(allThoughts, fmt.Sprintf("Worker %d: %s", t.WorkerID, thoughtText))
 				if t.Context != "" {
 					combinedContext = append(combinedContext, fmt.Sprintf("Worker %d Context: %s", t.WorkerID, t.Context))
 				}
 			}
 			resp.AllWorkerThoughts = allThoughts
-			resp.SuperIdea = s.synthesizeSuperIdea(thoughts, input.Track, strings.Join(combinedContext, "\n"))
+			resp.SuperIdea = s.synthesizeSuperIdea(thoughts, input.Track, strings.Join(combinedContext, "\n"), isTainted)
 		} else {
 			resp.Status = fmt.Sprintf("waiting_for_workers (%d/%d)", len(thoughts), input.ThinkingWorkerCount)
 		}
@@ -386,10 +453,14 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 	return resp, nil
 }
 
-func (s *SequentialThinkingServer) synthesizeSuperIdea(thoughts []ThoughtData, track string, context string) string {
+func (s *SequentialThinkingServer) synthesizeSuperIdea(thoughts []ThoughtData, track string, context string, isTainted bool) string {
 	var sb strings.Builder
 	sb.WriteString("🚀 SUPER IDEA SYNTHESIS\n")
 	sb.WriteString("=======================\n\n")
+
+	if isTainted {
+		sb.WriteString("⚠️ WARNING: This strategy was derived from untrusted (tainted) thoughts. Proceed with caution.\n\n")
+	}
 
 	if track != "" {
 		sb.WriteString(fmt.Sprintf("🛤️ TRACK: %s\n\n", strings.ToUpper(track)))
@@ -405,7 +476,11 @@ func (s *SequentialThinkingServer) synthesizeSuperIdea(thoughts []ThoughtData, t
 
 	for _, t := range thoughts {
 		sb.WriteString(fmt.Sprintf("📍 Worker %d Perspective:\n", t.WorkerID))
-		sb.WriteString(fmt.Sprintf("   \"%s\"\n\n", t.Thought))
+		thoughtText := t.Thought
+		if t.IsPrivate {
+			thoughtText = "[PRIVATE THOUGHT - REDACTED FOR SECURITY]"
+		}
+		sb.WriteString(fmt.Sprintf("   \"%s\"\n\n", thoughtText))
 	}
 
 	sb.WriteString("🎯 LLM ACTION REQUIRED: INTEGRATED STRATEGY SYNTHESIS\n")

@@ -18,6 +18,7 @@ func main() {
 	host := flag.String("host", "127.0.0.1", "Host for SSE transport")
 	port := flag.Int("port", 8080, "Port for SSE transport")
 	workerCount := flag.Int("thinking-worker", 0, "Number of workers for the Gather phase (overrides THINKING_WORKER_COUNT env)")
+	maxWorkerCount := flag.Int("max-thinking-worker", 0, "Maximum number of workers for the Gather phase (overrides MAX_THINKING_WORKER_COUNT env)")
 	shmRoot := flag.String("shm-root", "", "Root directory for shared memory storage (overrides SHM_ROOT env)")
 	disableDiagram := flag.Bool("disable-diagram", false, "Disable markdown flowchart generation by default (overrides DISABLE_DIAGRAM env)")
 	flag.Parse()
@@ -32,7 +33,7 @@ func main() {
 		Version: "0.3.0",
 	}, nil)
 
-	thinkingServer := NewSequentialThinkingServer(*workerCount, *shmRoot, defaultEnableDiagram)
+	thinkingServer := NewSequentialThinkingServer(*workerCount, *maxWorkerCount, *shmRoot, defaultEnableDiagram)
 
 	// Register the sequentialthinking tool
 	mcp.AddTool(s, &mcp.Tool{
@@ -138,10 +139,22 @@ Parameters:
 					"type":        "boolean",
 					"description": "Set to true to generate a markdown-native ASCII flowchart in the response. Enabled by default unless disabled via server config. Set to false if the user explicitly asks not to generate a diagram.",
 				},
-			},
-			Required: []string{"thought", "thoughtNumber", "totalThoughts", "nextThoughtNeeded"},
-		},
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args ThoughtData) (*mcp.CallToolResult, any, error) {
+				"isPrivate": map[string]any{
+					"type":        "boolean",
+					"description": "Zero-Knowledge: If true, this thought will be redacted from the final synthesis and allWorkerThoughts.",
+				},
+				"isTainted": map[string]any{
+					"type":        "boolean",
+					"description": "Taint Analysis: Mark this thought as untrusted (e.g., if it contains data from an unverified source).",
+				},
+				"complexity": map[string]any{
+					"type":        "string",
+					"description": "Optional metadata about the task complexity to help with dynamic scaling suggestions.",
+				},
+				},
+				Required: []string{"thought", "thoughtNumber", "totalThoughts", "nextThoughtNeeded"},
+				},
+				}, func(ctx context.Context, req *mcp.CallToolRequest, args ThoughtData) (*mcp.CallToolResult, any, error) {
 		resp, err := thinkingServer.ProcessThought(args)
 		if err != nil {
 			return &mcp.CallToolResult{
