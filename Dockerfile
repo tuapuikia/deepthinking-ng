@@ -1,4 +1,4 @@
-FROM golang:1.24-alpine AS builder
+FROM golang:1.26.2-alpine AS builder
 
 WORKDIR /app
 
@@ -11,8 +11,8 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the binary
-RUN CGO_ENABLED=0 GOOS=linux go build -o deepthinking-ng .
+# Build the binary with reproducible flags
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-buildid=" -o deepthinking-ng .
 
 FROM alpine:latest
 
