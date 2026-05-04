@@ -47,9 +47,40 @@ For maximum security, it is highly recommended to run this MCP server in an **is
 
 ## Installation
 
+### Local Build
+For a quick local build:
 ```bash
 go build -o deepthinking-ng .
 ```
+
+### Reproducible Builds
+To ensure the binary is bit-for-bit identical and verifiable, use the Docker-based build system. This uses a fixed Go version (`1.26.2`) and a controlled environment to eliminate variations caused by local toolchains.
+
+**Prerequisites**: Docker must be installed and running.
+
+#### Build All Platforms
+This command builds binaries for Linux, Windows, and macOS (amd64/arm64) inside a container:
+```bash
+make docker-reproducible-build
+```
+The resulting binaries and a `checksums.txt` file will be located in the `dist/` directory.
+
+#### Verification & Integrity
+You can verify the integrity of the build using SHA256 checksums.
+
+1. **Generate Reference Checksum**:
+   If you are a maintainer releasing a new version, generate the reference checksum:
+   ```bash
+   make checksum
+   ```
+   This creates `deepthinking-ng.sha256` based on the reproducible Linux binary.
+
+2. **Verify Against Reference**:
+   To confirm your local build matches the official reference:
+   ```bash
+   make verify
+   ```
+   This will perform a fresh reproducible build and compare its output against the `deepthinking-ng.sha256` file. If they match, you'll see: `Verification SUCCESS: Build matches reference!`.
 
 ## Running the Server
 
