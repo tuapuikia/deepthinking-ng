@@ -181,6 +181,10 @@ Parameters:
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "reset_thinking",
 		Description: "Resets the thinking process and clears shared memory in /dev/shm.",
+		InputSchema: map[string]any{
+			"type":       "object",
+			"properties": map[string]any{},
+		},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args struct{}) (*mcp.CallToolResult, any, error) {
 		err := thinkingServer.shm.ClearAll()
 		if err != nil {
