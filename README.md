@@ -23,6 +23,10 @@ A high-performance Sequential Thinking MCP server with **GPT (Gather, Process, T
   - **Windows**: `%TEMP%`
 - **Dynamic Scaling**: Suggests an optimal worker count based on task length (incremental scaling) and LLM-driven assessment of complexity. The server provides a structural suggestion that ramps up as the prompt length increases.
 - **Interactive Logging**: Beautifully formatted console output with phase and worker identification.
+- **Strong Nudges & Self-Correction**: The server implements a "Strong Nudge" system to help LLMs follow the rules:
+  - **Mandatory Field Enforcement**: Explicitly marks `thought`, `thoughtNumber`, `totalThoughts`, and `nextThoughtNeeded` as required in the schema.
+  - **Self-Correction Protocol**: The tool description includes a protocol for the LLM to immediately self-correct if a validation error occurs.
+  - **Conversational Error Messages**: Replaces cryptic errors with helpful, "nudge-like" guidance (e.g., *"💡 NUDGE: You're trying to enter the 'process' phase, but the 'gather' phase is still incomplete..."*).
 
 ## Security & Privacy
 
@@ -147,13 +151,13 @@ To prevent collisions between different `gemini-cli` instances, the server autom
 The primary tool for the thinking process.
 
 **Parameters:**
-- `thought` (string): Your current thinking step.
+- `thought` (string): **REQUIRED**. Your current thinking step.
+- `thoughtNumber` (int): **REQUIRED**. Current thought number.
+- `totalThoughts` (int): **REQUIRED**. Estimated total thoughts.
+- `nextThoughtNeeded` (bool): **REQUIRED**. Whether more thinking is required.
 - `phase` (string): "gather", "process", or "test" (default: "gather").
 - `workerId` (int): ID of the current worker (1, 2, 3...).
 - `thinkingWorkerCount` (int): Total workers for Gather phase (overrides env var).
-- `thoughtNumber` (int): Current thought number.
-- `totalThoughts` (int): Estimated total thoughts.
-- `nextThoughtNeeded` (bool): Whether more thinking is required.
 - `isRevision` (bool): Whether this revises a previous thought.
 - `revisesThought` (int): The thought number being revised.
 - `branchFromThought` (int): The thought number to branch from.

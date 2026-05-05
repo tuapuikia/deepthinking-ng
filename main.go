@@ -41,7 +41,7 @@ func main() {
 		Description: `A detailed tool for dynamic and reflective problem-solving through thoughts with GPT (Gather, Process, Test) workflow.
 This tool helps analyze problems through a flexible thinking process that can adapt and evolve.
 
-CRITICAL RULES:
+🚨 CRITICAL RULES & NUDGES:
 1. MANDATORY FIELDS: You MUST always provide 'thought', 'thoughtNumber', 'totalThoughts', and 'nextThoughtNeeded'.
 2. CAMELCASE ONLY: Use 'totalThoughts', NOT 'total_thoughts'. All parameters are camelCase.
 3. GPT WORKFLOW:
@@ -52,6 +52,9 @@ CRITICAL RULES:
      * Use phase='process'. Only available AFTER all gather steps are complete.
    - T (Test): A single worker tests and verifies the result.
      * Use phase='test'. Only available AFTER the process step is complete.
+
+💡 SELF-CORRECTION NUDGE:
+If you receive a validation error like "params must have required property 'thought'", it means you missed one of the 4 mandatory fields. Immediately retry with all 4 fields included.
 
 Shared Memory:
 Uses /dev/shm to share thoughts between workers during the Gather phase to synthesize a "Super Idea".
@@ -83,32 +86,32 @@ Parameters:
 			Properties: map[string]any{
 				"thought": map[string]any{
 					"type":        "string",
-					"description": "Your current thinking step",
+					"description": "Your current thinking step. (REQUIRED)",
 				},
 				"thoughtNumber": map[string]any{
 					"type":        "integer",
-					"description": "Current number in sequence",
+					"description": "Current number in sequence. (REQUIRED)",
 				},
 				"totalThoughts": map[string]any{
 					"type":        "integer",
-					"description": "Current estimate of thoughts needed",
+					"description": "Current estimate of thoughts needed. (REQUIRED)",
 				},
 				"nextThoughtNeeded": map[string]any{
 					"type":        "boolean",
-					"description": "True if you need more thinking",
+					"description": "True if you need more thinking. (REQUIRED)",
 				},
 				"phase": map[string]any{
 					"type":        "string",
-					"description": "Phase of thinking (gather, process, test)",
+					"description": "Phase of thinking (gather, process, test). Default: 'gather'",
 					"enum":        []string{"gather", "process", "test"},
 				},
 				"workerId": map[string]any{
 					"type":        "integer",
-					"description": "ID of the current worker",
+					"description": "ID of the current worker (1, 2, 3...). Default: 1",
 				},
 				"thinkingWorkerCount": map[string]any{
 					"type":        "integer",
-					"description": "Total number of workers for the Gather phase",
+					"description": "Total number of workers for the Gather phase. Default: 5",
 				},
 				"isRevision": map[string]any{
 					"type":        "boolean",
@@ -154,10 +157,10 @@ Parameters:
 					"type":        "string",
 					"description": "Optional metadata about the task complexity to help with dynamic scaling suggestions.",
 				},
-				},
-				Required: []string{"thought", "thoughtNumber", "totalThoughts", "nextThoughtNeeded"},
-				},
-				}, func(ctx context.Context, req *mcp.CallToolRequest, args ThoughtData) (*mcp.CallToolResult, any, error) {
+			},
+			Required: []string{"thought", "thoughtNumber", "totalThoughts", "nextThoughtNeeded"},
+		},
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args ThoughtData) (*mcp.CallToolResult, any, error) {
 		resp, err := thinkingServer.ProcessThought(args)
 		if err != nil {
 			return &mcp.CallToolResult{

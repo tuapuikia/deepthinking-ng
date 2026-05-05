@@ -318,7 +318,7 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 	if input.Phase == "process" {
 		gatherThoughts, _ := s.shm.GetPhaseThoughts("gather")
 		if len(gatherThoughts) < input.ThinkingWorkerCount {
-			return ThoughtResponse{}, fmt.Errorf("STRICT WORKFLOW VIOLATION: Cannot enter 'process' phase. 'gather' phase is incomplete. You must gather perspectives from %d workers (currently have %d). FIX: Call this tool again with phase='gather' and workerId=%d", input.ThinkingWorkerCount, len(gatherThoughts), len(gatherThoughts)+1)
+			return ThoughtResponse{}, fmt.Errorf("💡 NUDGE: Workflow Requirement. You're trying to enter the 'process' phase, but the 'gather' phase is still incomplete. You need to gather perspectives from %d workers first (you currently have %d). Please call me again with phase='gather' and workerId=%d to continue gathering ideas!", input.ThinkingWorkerCount, len(gatherThoughts), len(gatherThoughts)+1)
 		}
 		// Combine thoughts and clear gather phase to prevent reuse
 		s.shm.ClearPhase("gather")
@@ -332,7 +332,7 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 			}
 		}
 		if !hasProcess {
-			return ThoughtResponse{}, fmt.Errorf("STRICT WORKFLOW VIOLATION: Cannot enter 'test' phase. 'process' phase is incomplete. You must process the gathered ideas first using phase='process'. FIX: Call this tool again with phase='process'")
+			return ThoughtResponse{}, fmt.Errorf("💡 NUDGE: Workflow Requirement. You're trying to enter the 'test' phase, but you haven't processed the gathered ideas yet! Please use phase='process' first to synthesize a strategy before moving to testing.")
 		}
 		// Clear process phase from SHM to avoid leakage as soon as we enter test
 		s.shm.ClearPhase("process")
