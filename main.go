@@ -33,11 +33,11 @@ func main() {
 		Version: "0.3.0",
 	}, nil)
 
-	thinkingServer := NewSequentialThinkingServer(*workerCount, *maxWorkerCount, *shmRoot, defaultEnableDiagram)
+	thinkingServer := NewDeepThinkingServer(*workerCount, *maxWorkerCount, *shmRoot, defaultEnableDiagram)
 
-	// Register the sequentialthinking tool
+	// Register the deepthinking tool
 	mcp.AddTool(s, &mcp.Tool{
-		Name: "sequentialthinking",
+		Name: "deepthinking",
 		Description: `A detailed tool for dynamic and reflective problem-solving through thoughts with GPT (Gather, Process, Test) workflow.
 This tool helps analyze problems through a flexible thinking process that can adapt and evolve.
 
@@ -216,7 +216,7 @@ Parameters:
 
 	switch *transportType {
 	case "stdio":
-		fmt.Fprintln(os.Stderr, "Sequential Thinking MCP Server running on stdio")
+		fmt.Fprintln(os.Stderr, "DeepThinking MCP Server running on stdio")
 		if err := s.Run(ctx, &mcp.StdioTransport{}); err != nil {
 			log.Fatalf("Stdio server failed: %v", err)
 		}
@@ -225,7 +225,7 @@ Parameters:
 			return s
 		}, nil)
 
-		fmt.Fprintf(os.Stderr, "Sequential Thinking MCP Server running on SSE at %s:%d\n", *host, *port)
+		fmt.Fprintf(os.Stderr, "DeepThinking MCP Server running on SSE at %s:%d\n", *host, *port)
 		if err := http.ListenAndServe(fmt.Sprintf("%s:%d", *host, *port), handler); err != nil {
 			log.Fatalf("SSE server failed: %v", err)
 		}

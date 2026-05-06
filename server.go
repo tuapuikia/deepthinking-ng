@@ -93,8 +93,8 @@ type ThoughtResponse struct {
 	SuggestedWorkerCount int  `json:"suggestedWorkerCount,omitempty"`
 }
 
-// SequentialThinkingServer manages the state of the thinking process.
-type SequentialThinkingServer struct {
+// DeepThinkingServer manages the state of the thinking process.
+type DeepThinkingServer struct {
 	mu                    sync.Mutex
 	thoughtHistory        []ThoughtData
 	branches              map[string][]ThoughtData
@@ -106,8 +106,8 @@ type SequentialThinkingServer struct {
 	shm                   *SharedMemoryManager
 }
 
-// NewSequentialThinkingServer creates a new instance of the server.
-func NewSequentialThinkingServer(workerCount int, maxWorkerCount int, shmRoot string, defaultEnableDiagram bool) *SequentialThinkingServer {
+// NewDeepThinkingServer creates a new instance of the server.
+func NewDeepThinkingServer(workerCount int, maxWorkerCount int, shmRoot string, defaultEnableDiagram bool) *DeepThinkingServer {
 	disableLogging := strings.ToLower(os.Getenv("DISABLE_THOUGHT_LOGGING")) == "true"
 
 	if workerCount <= 0 {
@@ -129,7 +129,7 @@ func NewSequentialThinkingServer(workerCount int, maxWorkerCount int, shmRoot st
 		workerCount = maxWorkerCount
 	}
 
-	return &SequentialThinkingServer{
+	return &DeepThinkingServer{
 		thoughtHistory:        make([]ThoughtData, 0),
 		branches:              make(map[string][]ThoughtData),
 		disableThoughtLogging: disableLogging,
@@ -140,7 +140,7 @@ func NewSequentialThinkingServer(workerCount int, maxWorkerCount int, shmRoot st
 	}
 }
 
-func (s *SequentialThinkingServer) getAvailableFilename() string {
+func (s *DeepThinkingServer) getAvailableFilename() string {
 	base := "deepthinking-flow.md"
 	if _, err := os.Stat(base); os.IsNotExist(err) {
 		return base
@@ -156,7 +156,7 @@ func (s *SequentialThinkingServer) getAvailableFilename() string {
 	}
 }
 
-func (s *SequentialThinkingServer) saveFlowchartLocked(content string) {
+func (s *DeepThinkingServer) saveFlowchartLocked(content string) {
 	if content == "" {
 		return
 	}
@@ -173,7 +173,7 @@ func (s *SequentialThinkingServer) saveFlowchartLocked(content string) {
 }
 
 // formatThought formats the thought data for logging.
-func (s *SequentialThinkingServer) formatThought(data ThoughtData) string {
+func (s *DeepThinkingServer) formatThought(data ThoughtData) string {
 	var prefix string
 	var context string
 
@@ -223,7 +223,7 @@ func (s *SequentialThinkingServer) formatThought(data ThoughtData) string {
 }
 
 // ProcessThought processes a new thinking step and returns the response.
-func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtResponse, error) {
+func (s *DeepThinkingServer) ProcessThought(input ThoughtData) (ThoughtResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -452,7 +452,7 @@ func (s *SequentialThinkingServer) ProcessThought(input ThoughtData) (ThoughtRes
 	return resp, nil
 }
 
-func (s *SequentialThinkingServer) synthesizeSuperIdea(thoughts []ThoughtData, track string, context string, isTainted bool) string {
+func (s *DeepThinkingServer) synthesizeSuperIdea(thoughts []ThoughtData, track string, context string, isTainted bool) string {
 	var sb strings.Builder
 	sb.WriteString("🚀 SUPER IDEA SYNTHESIS\n")
 	sb.WriteString("=======================\n\n")
@@ -508,7 +508,7 @@ func (s *SequentialThinkingServer) synthesizeSuperIdea(thoughts []ThoughtData, t
 	return redact(sb.String())
 }
 
-func (s *SequentialThinkingServer) wrapText(text string, width int) []string {
+func (s *DeepThinkingServer) wrapText(text string, width int) []string {
 	var lines []string
 	words := strings.Fields(text)
 	if len(words) == 0 {
@@ -528,7 +528,7 @@ func (s *SequentialThinkingServer) wrapText(text string, width int) []string {
 	return lines
 }
 
-func (s *SequentialThinkingServer) generateMarkdownFlowchart() string {
+func (s *DeepThinkingServer) generateMarkdownFlowchart() string {
 	var sb strings.Builder
 	sb.WriteString("```text\n")
 	sb.WriteString("🧠 DEEPTHINKING FLOWCHART\n")

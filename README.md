@@ -1,6 +1,6 @@
 # DeepThinking-NG MCP
 
-A high-performance Sequential Thinking MCP server with **GPT (Gather, Process, Test)** workflow, **Thinking Tracks**, and **Linux Shared Memory** support.
+A high-performance DeepThinking MCP server with **GPT (Gather, Process, Test)** workflow, **Thinking Tracks**, and **Linux Shared Memory** support.
 
 ## Features
 
@@ -147,7 +147,7 @@ To prevent collisions between different `gemini-cli` instances, the server autom
 
 ## Tools
 
-### `sequentialthinking`
+### `deepthinking`
 The primary tool for the thinking process.
 
 **Parameters:**
