@@ -33,6 +33,8 @@ func main() {
 		Version: "0.3.0",
 	}, nil)
 
+	fmt.Fprintf(os.Stderr, "Diagram generation: %v\n", defaultEnableDiagram)
+
 	thinkingServer := NewDeepThinkingServer(*workerCount, *maxWorkerCount, *shmRoot, defaultEnableDiagram)
 
 	// Register the deepthinking tool
@@ -74,9 +76,10 @@ Parameters:
 - revisesThought: Which thought number is being reconsidered.
 - branchFromThought: Which thought number is the branching point.
 - branchId: Identifier for the current branch.
-- needsMoreThoughts: If reaching end but realizing more thoughts needed.
+- needsMoreThoughts: Whether more thoughts are needed.
 - track: The thinking track to use (e.g., 'bug-fix', 'feature', 'security').
-- context: (Optional) Discovered tools, environment details, or filesystem context to ground the thinking.`,
+- context: (Optional) Discovered tools, environment details, or filesystem context to ground the thinking.
+- generateDiagram: (Optional) Set to true to generate a markdown-native ASCII flowchart. Default is controlled by server config.`,
 		InputSchema: struct {
 			Type       string         `json:"type"`
 			Properties map[string]any `json:"properties,omitempty"`
@@ -143,7 +146,7 @@ Parameters:
 				},
 				"generateDiagram": map[string]any{
 					"type":        "boolean",
-					"description": "Set to true to generate a markdown-native ASCII flowchart in the response. Enabled by default unless disabled via server config. Set to false if the user explicitly asks not to generate a diagram.",
+					"description": "Set to true to generate a markdown-native ASCII flowchart in the response. Default is controlled by server config (DISABLE_DIAGRAM).",
 				},
 				"isPrivate": map[string]any{
 					"type":        "boolean",

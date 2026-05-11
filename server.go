@@ -419,6 +419,7 @@ func (s *DeepThinkingServer) ProcessThought(input ThoughtData) (ThoughtResponse,
 	}
 
 	if shouldGenerateDiagram {
+		fmt.Fprintf(os.Stderr, "Generating flowchart (Thought %d, Worker %d)...\n", input.ThoughtNumber, input.WorkerID)
 		resp.Flowchart = s.generateMarkdownFlowchart()
 		s.saveFlowchartLocked(resp.Flowchart)
 	}
