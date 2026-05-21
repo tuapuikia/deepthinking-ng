@@ -345,10 +345,10 @@ func TestProcessPhaseTransition(t *testing.T) {
 		t.Fatalf("Process phase failed: %v", err)
 	}
 
-	// 3. Verify gather phase is cleared
+	// 3. Verify gather phase is NOT cleared (preserves thoughts for fault tolerance and retry)
 	gatherThoughtsAfter, _ := server.shm.GetPhaseThoughts("gather")
-	if len(gatherThoughtsAfter) != 0 {
-		t.Errorf("Expected gather thoughts to be cleared when entering process phase, but found %d", len(gatherThoughtsAfter))
+	if len(gatherThoughtsAfter) != 2 {
+		t.Errorf("Expected gather thoughts to be preserved, but found %d", len(gatherThoughtsAfter))
 	}
 
 	// 4. Verify process phase files exist

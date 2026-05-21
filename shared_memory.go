@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 )
 
 func getEnv(key, fallback string) string {
@@ -89,6 +90,27 @@ func NewSharedMemoryManager(shmRoot string) *SharedMemoryManager {
 	}
 
 	shmPath := filepath.Join(shmRoot, sessionID)
+
+	// Clean up stale session directories in shmRoot during startup
+	if entries, err := os.ReadDir(shmRoot); err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() {
+				dirPath := filepath.Join(shmRoot, entry.Name())
+				// Don't delete the current session directory we just created or are about to use
+				if entry.Name() == sessionID {
+					continue
+				}
+				// Check modification time
+				if info, err := os.Stat(dirPath); err == nil {
+					// If not modified for more than 2 hours, clean it up
+					if time.Since(info.ModTime()) > 2*time.Hour {
+						fmt.Fprintf(os.Stderr, "Cleaning up stale shared memory session: %s (inactive since %v)\n", entry.Name(), info.ModTime())
+						os.RemoveAll(dirPath)
+					}
+				}
+			}
+		}
+	}
 
 	// Ensure root directory exists with restrictive permissions (0700)
 	// Note: On Windows, permissions are handled differently, but 0700 is a safe default for Unix-like systems.

@@ -54,6 +54,7 @@ This tool helps analyze problems through a flexible thinking process that can ad
      * Use phase='process'. Only available AFTER all gather steps are complete.
    - T (Test): A single worker tests and verifies the result.
      * Use phase='test'. Only available AFTER the process step is complete.
+4. NEW THINKING ISOLATION: When beginning a brand new thinking task (starting with thoughtNumber=1), you MUST ALWAYS call the 'reset_thinking' tool first. This completely clears any shared memory (/dev/shm) and in-memory state from previous tasks to prevent state pollution.
 
 💡 SELF-CORRECTION NUDGE:
 If you receive a validation error like "params must have required property 'thought'", it means you missed one of the 4 mandatory fields. Immediately retry with all 4 fields included.
@@ -163,7 +164,21 @@ Parameters:
 			},
 			Required: []string{"thought", "thoughtNumber", "totalThoughts", "nextThoughtNeeded"},
 		},
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args ThoughtData) (*mcp.CallToolResult, any, error) {
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args ThoughtData) (res *mcp.CallToolResult, resObj any, resErr error) {
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Fprintf(os.Stderr, "PANIC RECOVERED in deepthinking tool: %v\n", r)
+				res = &mcp.CallToolResult{
+					IsError: true,
+					Content: []mcp.Content{
+						&mcp.TextContent{Text: fmt.Sprintf("Internal Server Error: Panic recovered: %v", r)},
+					},
+				}
+				resObj = nil
+				resErr = nil
+			}
+		}()
+
 		resp, err := thinkingServer.ProcessThought(args)
 		if err != nil {
 			return &mcp.CallToolResult{
@@ -191,7 +206,24 @@ Parameters:
 			"type":       "object",
 			"properties": map[string]any{},
 		},
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args struct{}) (*mcp.CallToolResult, any, error) {
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args struct{}) (res *mcp.CallToolResult, resObj any, resErr error) {
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Fprintf(os.Stderr, "PANIC RECOVERED in reset_thinking tool: %v\n", r)
+				res = &mcp.CallToolResult{
+					IsError: true,
+					Content: []mcp.Content{
+						&mcp.TextContent{Text: fmt.Sprintf("Internal Server Error: Panic recovered: %v", r)},
+					},
+				}
+				resObj = nil
+				resErr = nil
+			}
+		}()
+
+		thinkingServer.mu.Lock()
+		defer thinkingServer.mu.Unlock()
+
 		err := thinkingServer.shm.ClearAll()
 		if err != nil {
 			return &mcp.CallToolResult{
@@ -203,10 +235,8 @@ Parameters:
 		}
 
 		// Also reset in-memory state
-		thinkingServer.mu.Lock()
 		thinkingServer.thoughtHistory = make([]ThoughtData, 0)
 		thinkingServer.branches = make(map[string][]ThoughtData)
-		thinkingServer.mu.Unlock()
 
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{

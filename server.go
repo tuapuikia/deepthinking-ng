@@ -223,7 +223,14 @@ func (s *DeepThinkingServer) formatThought(data ThoughtData) string {
 }
 
 // ProcessThought processes a new thinking step and returns the response.
-func (s *DeepThinkingServer) ProcessThought(input ThoughtData) (ThoughtResponse, error) {
+func (s *DeepThinkingServer) ProcessThought(input ThoughtData) (resp ThoughtResponse, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic in ProcessThought: %v", r)
+			fmt.Fprintf(os.Stderr, "PANIC RECOVERED in ProcessThought: %v\n", r)
+		}
+	}()
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -317,13 +324,17 @@ func (s *DeepThinkingServer) ProcessThought(input ThoughtData) (ThoughtResponse,
 	// --- STRICT GPT WORKFLOW ENFORCEMENT ---
 	if input.Phase == "process" {
 		gatherThoughts, _ := s.shm.GetPhaseThoughts("gather")
-		if len(gatherThoughts) < input.ThinkingWorkerCount {
-			return ThoughtResponse{}, fmt.Errorf("💡 NUDGE: Workflow Requirement. You're trying to enter the 'process' phase, but the 'gather' phase is still incomplete. You need to gather perspectives from %d workers first (you currently have %d). Please call me again with phase='gather' and workerId=%d to continue gathering ideas!", input.ThinkingWorkerCount, len(gatherThoughts), len(gatherThoughts)+1)
+		// Count unique workers to be highly robust and ignore duplicates
+		uniqueWorkers := make(map[int]bool)
+		for _, t := range gatherThoughts {
+			uniqueWorkers[t.WorkerID] = true
 		}
-		// Combine thoughts and clear gather phase to prevent reuse
-		s.shm.ClearPhase("gather")
+		if len(uniqueWorkers) < input.ThinkingWorkerCount {
+			return ThoughtResponse{}, fmt.Errorf("💡 NUDGE: Workflow Requirement. You're trying to enter the 'process' phase, but the 'gather' phase is still incomplete. You need to gather perspectives from %d workers first (you currently have %d). Please call me again with phase='gather' and workerId=%d to continue gathering ideas!", input.ThinkingWorkerCount, len(uniqueWorkers), len(uniqueWorkers)+1)
+		}
+		// Do not clear the gather phase early to prevent data loss in case of retries/restarts.
 	} else if input.Phase == "test" {
-		// Check in-memory history to allow SHM cleanup of previous phases
+		// Check both in-memory history and shared memory to be highly resilient to restarts
 		hasProcess := false
 		for _, t := range s.thoughtHistory {
 			if t.Phase == "process" {
@@ -332,10 +343,15 @@ func (s *DeepThinkingServer) ProcessThought(input ThoughtData) (ThoughtResponse,
 			}
 		}
 		if !hasProcess {
+			processThoughts, _ := s.shm.GetPhaseThoughts("process")
+			if len(processThoughts) > 0 {
+				hasProcess = true
+			}
+		}
+		if !hasProcess {
 			return ThoughtResponse{}, fmt.Errorf("💡 NUDGE: Workflow Requirement. You're trying to enter the 'test' phase, but you haven't processed the gathered ideas yet! Please use phase='process' first to synthesize a strategy before moving to testing.")
 		}
-		// Clear process phase from SHM to avoid leakage as soon as we enter test
-		s.shm.ClearPhase("process")
+		// Do not clear the process phase early to prevent data loss in case of retries/restarts.
 	}
 	// ---------------------------------------
 
@@ -373,7 +389,7 @@ func (s *DeepThinkingServer) ProcessThought(input ThoughtData) (ThoughtResponse,
 		branches = append(branches, k)
 	}
 
-	resp := ThoughtResponse{
+	resp = ThoughtResponse{
 		ThoughtNumber:        input.ThoughtNumber,
 		TotalThoughts:        input.TotalThoughts,
 		NextThoughtNeeded:    input.NextThoughtNeeded,
