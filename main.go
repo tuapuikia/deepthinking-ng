@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -21,6 +22,24 @@ func main() {
 	maxWorkerCount := flag.Int("max-thinking-worker", 0, "Maximum number of workers for the Gather phase (overrides MAX_THINKING_WORKER_COUNT env)")
 	shmRoot := flag.String("shm-root", "", "Root directory for shared memory storage (overrides SHM_ROOT env)")
 	disableDiagram := flag.Bool("disable-diagram", false, "Disable markdown flowchart generation by default (overrides DISABLE_DIAGRAM env)")
+
+	// Timeouts & Watchdog
+	defaultHardTimeout := 60 * time.Second
+	if envVal := os.Getenv("DEEPTHINKING_TIMEOUT"); envVal != "" {
+		if d, err := time.ParseDuration(envVal); err == nil {
+			defaultHardTimeout = d
+		}
+	}
+	hardTimeout := flag.Duration("timeout", defaultHardTimeout, "Hard timeout for tool execution (triggers self-termination watchdog) (overrides DEEPTHINKING_TIMEOUT env)")
+
+	defaultSoftTimeout := 45 * time.Second
+	if envVal := os.Getenv("DEEPTHINKING_SOFT_TIMEOUT"); envVal != "" {
+		if d, err := time.ParseDuration(envVal); err == nil {
+			defaultSoftTimeout = d
+		}
+	}
+	softTimeout := flag.Duration("soft-timeout", defaultSoftTimeout, "Soft timeout for tool execution (returns retryable error to client) (overrides DEEPTHINKING_SOFT_TIMEOUT env)")
+
 	flag.Parse()
 
 	defaultEnableDiagram := true
@@ -165,37 +184,111 @@ Parameters:
 			Required: []string{"thought", "thoughtNumber", "totalThoughts", "nextThoughtNeeded"},
 		},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args ThoughtData) (res *mcp.CallToolResult, resObj any, resErr error) {
-		defer func() {
-			if r := recover(); r != nil {
-				fmt.Fprintf(os.Stderr, "PANIC RECOVERED in deepthinking tool: %v\n", r)
-				res = &mcp.CallToolResult{
-					IsError: true,
-					Content: []mcp.Content{
-						&mcp.TextContent{Text: fmt.Sprintf("Internal Server Error: Panic recovered: %v", r)},
-					},
+		type callResult struct {
+			res    *mcp.CallToolResult
+			resObj any
+			resErr error
+		}
+		ch := make(chan callResult, 1)
+		startTime := time.Now()
+
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					fmt.Fprintf(os.Stderr, "PANIC RECOVERED in background deepthinking tool: %v\n", r)
+					ch <- callResult{
+						res: &mcp.CallToolResult{
+							IsError: true,
+							Content: []mcp.Content{
+								&mcp.TextContent{Text: fmt.Sprintf("Internal Server Error: Panic recovered: %v", r)},
+							},
+						},
+						resObj: nil,
+						resErr: nil,
+					}
 				}
-				resObj = nil
-				resErr = nil
+			}()
+
+			resp, err := thinkingServer.ProcessThought(args)
+			if err != nil {
+				ch <- callResult{
+					res: &mcp.CallToolResult{
+						IsError: true,
+						Content: []mcp.Content{
+							&mcp.TextContent{Text: err.Error()},
+						},
+					},
+					resObj: nil,
+					resErr: nil,
+				}
+				return
+			}
+
+			// Return the response as structured content
+			jsonResp, _ := json.MarshalIndent(resp, "", "  ")
+			ch <- callResult{
+				res: &mcp.CallToolResult{
+					Content: []mcp.Content{
+						&mcp.TextContent{Text: string(jsonResp)},
+					},
+				},
+				resObj: resp,
+				resErr: nil,
 			}
 		}()
 
-		resp, err := thinkingServer.ProcessThought(args)
-		if err != nil {
+		select {
+		case res := <-ch:
+			return res.res, res.resObj, res.resErr
+
+		case <-ctx.Done():
+			// Client cancelled/timed out.
+			elapsed := time.Since(startTime)
+			remaining := *hardTimeout - elapsed
+			if remaining < 0 {
+				remaining = 5 * time.Second
+			}
+			go func() {
+				select {
+				case <-ch:
+					// finished normally
+				case <-time.After(remaining):
+					fmt.Fprintf(os.Stderr, "FATAL: DeepThinking execution hung after client cancellation! Watchdog triggered hard crash after %v to allow restart.\n", *hardTimeout)
+					os.Exit(1)
+				}
+			}()
+
 			return &mcp.CallToolResult{
 				IsError: true,
 				Content: []mcp.Content{
-					&mcp.TextContent{Text: err.Error()},
+					&mcp.TextContent{Text: "Request cancelled by client (context timeout)"},
+				},
+			}, nil, ctx.Err()
+
+		case <-time.After(*softTimeout):
+			// Soft timeout fired!
+			remainingHardTimeout := *hardTimeout - *softTimeout
+			if remainingHardTimeout < 0 {
+				remainingHardTimeout = 5 * time.Second
+			}
+
+			go func() {
+				select {
+				case <-ch:
+					fmt.Fprintln(os.Stderr, "INFO: Background thought process finished after soft timeout.")
+				case <-time.After(remainingHardTimeout):
+					fmt.Fprintf(os.Stderr, "FATAL: DeepThinking execution hung! Watchdog triggered hard crash after %v to allow restart.\n", *hardTimeout)
+					os.Exit(1)
+				}
+			}()
+
+			return &mcp.CallToolResult{
+				IsError: true,
+				Content: []mcp.Content{
+					&mcp.TextContent{Text: fmt.Sprintf("DeepThinking tool execution exceeded soft timeout of %v. The server remains running. You may retry your request.", *softTimeout)},
 				},
 			}, nil, nil
 		}
-
-		// Return the response as structured content
-		jsonResp, _ := json.MarshalIndent(resp, "", "  ")
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{
-				&mcp.TextContent{Text: string(jsonResp)},
-			},
-		}, resp, nil
 	})
 
 	// Register the reset_thinking tool

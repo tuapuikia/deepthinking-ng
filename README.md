@@ -110,7 +110,9 @@ Add the following to your `gemini-cli` configuration (usually in `~/.gemini/conf
       "args": [],
       "env": {
         "THINKING_WORKER_COUNT": "5",
-        "SHM_ROOT": "/dev/shm/deepthinking-ng"
+        "SHM_ROOT": "/dev/shm/deepthinking-ng",
+        "DEEPTHINKING_TIMEOUT": "60s",
+        "DEEPTHINKING_SOFT_TIMEOUT": "45s"
       }
     }
   }
@@ -129,6 +131,8 @@ You can configure the server using environment variables or command-line flags:
 | `DISABLE_DIAGRAM` | `-disable-diagram` | Set to `true` to disable flowchart generation by default. | `false` |
 | `GEMINI_SESSION_ID` | N/A | Unique ID for the session to isolate shared memory. | `<Random UUID>` |
 | `DISABLE_THOUGHT_LOGGING` | N/A | Set to `true` to disable console logging of thoughts. | `false` |
+| `DEEPTHINKING_TIMEOUT` | `-timeout` | Hard timeout for tool execution (triggers self-termination watchdog). | `60s` |
+| `DEEPTHINKING_SOFT_TIMEOUT` | `-soft-timeout` | Soft timeout for tool execution (returns retryable error to client). | `45s` |
 
 ### OS-Specific Defaults for `SHM_ROOT`
 - **Linux**: `/dev/shm/deepthinking-ng`
