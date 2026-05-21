@@ -142,18 +142,22 @@ func NewDeepThinkingServer(workerCount int, maxWorkerCount int, shmRoot string, 
 
 func (s *DeepThinkingServer) getAvailableFilename() string {
 	base := "deepthinking-flow.md"
-	if _, err := os.Stat(base); os.IsNotExist(err) {
+	if _, err := os.Stat(base); err != nil {
+		// If the file doesn't exist, we can use it.
+		// If we get any other error (like permission denied), return base to let the subsequent write fail and log/handle the error, rather than hanging.
 		return base
 	}
 
 	i := 1
-	for {
+	// Safety limit: don't loop more than 1000 times to prevent any potential hang
+	for i <= 1000 {
 		filename := fmt.Sprintf("deepthinking-%d-flow.md", i)
-		if _, err := os.Stat(filename); os.IsNotExist(err) {
+		if _, err := os.Stat(filename); err != nil {
 			return filename
 		}
 		i++
 	}
+	return base
 }
 
 func (s *DeepThinkingServer) saveFlowchartLocked(content string) {
@@ -296,6 +300,7 @@ func (s *DeepThinkingServer) ProcessThought(input ThoughtData) (resp ThoughtResp
 			s.shm.ClearAll()
 			s.thoughtHistory = make([]ThoughtData, 0)
 			s.branches = make(map[string][]ThoughtData)
+			s.currentFlowchartFile = ""
 		}
 	}
 

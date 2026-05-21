@@ -330,6 +330,7 @@ Parameters:
 		// Also reset in-memory state
 		thinkingServer.thoughtHistory = make([]ThoughtData, 0)
 		thinkingServer.branches = make(map[string][]ThoughtData)
+		thinkingServer.currentFlowchartFile = ""
 
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
