@@ -91,26 +91,28 @@ func NewSharedMemoryManager(shmRoot string) *SharedMemoryManager {
 
 	shmPath := filepath.Join(shmRoot, sessionID)
 
-	// Clean up stale session directories in shmRoot during startup
-	if entries, err := os.ReadDir(shmRoot); err == nil {
-		for _, entry := range entries {
-			if entry.IsDir() {
-				dirPath := filepath.Join(shmRoot, entry.Name())
-				// Don't delete the current session directory we just created or are about to use
-				if entry.Name() == sessionID {
-					continue
-				}
-				// Check modification time
-				if info, err := os.Stat(dirPath); err == nil {
-					// If not modified for more than 2 hours, clean it up
-					if time.Since(info.ModTime()) > 2*time.Hour {
-						fmt.Fprintf(os.Stderr, "Cleaning up stale shared memory session: %s (inactive since %v)\n", entry.Name(), info.ModTime())
-						os.RemoveAll(dirPath)
+	// Clean up stale session directories in shmRoot during startup asynchronously
+	go func() {
+		if entries, err := os.ReadDir(shmRoot); err == nil {
+			for _, entry := range entries {
+				if entry.IsDir() {
+					dirPath := filepath.Join(shmRoot, entry.Name())
+					// Don't delete the current session directory we just created or are about to use
+					if entry.Name() == sessionID {
+						continue
+					}
+					// Check modification time
+					if info, err := os.Stat(dirPath); err == nil {
+						// If not modified for more than 2 hours, clean it up
+						if time.Since(info.ModTime()) > 2*time.Hour {
+							fmt.Fprintf(os.Stderr, "Cleaning up stale shared memory session: %s (inactive since %v)\n", entry.Name(), info.ModTime())
+							os.RemoveAll(dirPath)
+						}
 					}
 				}
 			}
 		}
-	}
+	}()
 
 	// Ensure root directory exists with restrictive permissions (0700)
 	// Note: On Windows, permissions are handled differently, but 0700 is a safe default for Unix-like systems.
@@ -203,22 +205,30 @@ func (m *SharedMemoryManager) ClearAll() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Read the directory contents
-	entries, err := os.ReadDir(m.shmPath)
-	if err != nil {
+	// Use rename-and-delete pattern for near-instant response
+	tempPath := m.shmPath + ".tmp." + generateSessionID()[:8]
+	
+	// Rename current session dir to temp path
+	if err := os.Rename(m.shmPath, tempPath); err != nil {
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return err
+		// If rename fails, fallback to synchronous delete to be safe
+		return os.RemoveAll(m.shmPath)
 	}
 
-	// Remove each entry (gather, process, test folders)
-	for _, entry := range entries {
-		err := os.RemoveAll(filepath.Join(m.shmPath, entry.Name()))
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to remove %s: %v\n", entry.Name(), err)
-		}
+	// Immediately recreate the empty session directory
+	if err := os.MkdirAll(m.shmPath, 0700); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to recreate shm path after rename: %v\n", err)
 	}
+
+	// Delete the old contents in the background
+	go func() {
+		if err := os.RemoveAll(tempPath); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: background cleanup of %s failed: %v\n", tempPath, err)
+		}
+	}()
+
 	return nil
 }
 
@@ -232,5 +242,24 @@ func (m *SharedMemoryManager) ClearPhase(phase string) error {
 	defer m.mu.Unlock()
 
 	dir := filepath.Join(m.shmPath, phase)
-	return os.RemoveAll(dir)
+	
+	// Use rename-and-delete pattern for near-instant response
+	tempPath := dir + ".tmp." + generateSessionID()[:8]
+	
+	if err := os.Rename(dir, tempPath); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		// Fallback to synchronous delete
+		return os.RemoveAll(dir)
+	}
+
+	// Delete in background
+	go func() {
+		if err := os.RemoveAll(tempPath); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: background cleanup of phase %s failed: %v\n", phase, err)
+		}
+	}()
+
+	return nil
 }

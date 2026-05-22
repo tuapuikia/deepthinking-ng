@@ -806,3 +806,52 @@ func TestSuperIdeaSynthesisHint(t *testing.T) {
 		t.Error("SuperIdea missing the diagram visualization tip")
 	}
 }
+
+func TestProcessBatchThoughts(t *testing.T) {
+	server := NewDeepThinkingServer(0, 10, "", false)
+	defer os.RemoveAll(server.shm.shmPath)
+	server.shm.ClearAll()
+	server.thoughtHistory = nil
+
+	workerCount := 3
+	server.defaultWorkerCount = workerCount
+
+	thoughts := []ThoughtData{
+		{
+			Thought:             "Worker 1 gather",
+			Phase:               "gather",
+			WorkerID:            1,
+			ThinkingWorkerCount: workerCount,
+			NextThoughtNeeded:   true,
+		},
+		{
+			Thought:             "Worker 2 gather",
+			Phase:               "gather",
+			WorkerID:            2,
+			ThinkingWorkerCount: workerCount,
+			NextThoughtNeeded:   true,
+		},
+		{
+			Thought:             "Worker 3 gather",
+			Phase:               "gather",
+			WorkerID:            3,
+			ThinkingWorkerCount: workerCount,
+			NextThoughtNeeded:   true,
+		},
+	}
+
+	resp, err := server.ProcessBatchThoughts(thoughts)
+	if err != nil {
+		t.Fatalf("ProcessBatchThoughts failed: %v", err)
+	}
+
+	if resp.Status != "all_workers_finished" {
+		t.Errorf("Expected all_workers_finished, got %s", resp.Status)
+	}
+	if len(resp.AllWorkerThoughts) != 3 {
+		t.Errorf("Expected 3 worker thoughts, got %d", len(resp.AllWorkerThoughts))
+	}
+	if resp.SuperIdea == "" {
+		t.Error("Expected SuperIdea to be generated")
+	}
+}

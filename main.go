@@ -291,6 +291,125 @@ Parameters:
 		}
 	})
 
+	// Register the batch_deepthinking tool
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "batch_deepthinking",
+		Description: `Process multiple thinking steps in a single call. 
+This is highly recommended for the 'gather' phase to explore multiple perspectives efficiently in one turn.
+Each item in the 'thoughts' array must follow the same rules as the standard 'deepthinking' tool.`,
+		InputSchema: struct {
+			Type       string         `json:"type"`
+			Properties map[string]any `json:"properties,omitempty"`
+			Required   []string       `json:"required,omitempty"`
+		}{
+			Type: "object",
+			Properties: map[string]any{
+				"thoughts": map[string]any{
+					"type": "array",
+					"items": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"thought": map[string]any{
+								"type":        "string",
+								"description": "Your current thinking step. (REQUIRED)",
+							},
+							"thoughtNumber": map[string]any{
+								"type":        "integer",
+								"description": "Current number in sequence. (REQUIRED)",
+							},
+							"totalThoughts": map[string]any{
+								"type":        "integer",
+								"description": "Current estimate of thoughts needed. (REQUIRED)",
+							},
+							"nextThoughtNeeded": map[string]any{
+								"type":        "boolean",
+								"description": "True if you need more thinking. (REQUIRED)",
+							},
+							"phase": map[string]any{
+								"type":        "string",
+								"description": "Phase of thinking (gather, process, test). Default: 'gather'",
+								"enum":        []string{"gather", "process", "test"},
+							},
+							"workerId": map[string]any{
+								"type":        "integer",
+								"description": "ID of the current worker (1, 2, 3...). Default: 1",
+							},
+							"thinkingWorkerCount": map[string]any{
+								"type":        "integer",
+								"description": "Total number of workers for the Gather phase. Default: 5",
+							},
+							"isRevision": map[string]any{
+								"type":        "boolean",
+								"description": "Whether this is a revision of a previous thought",
+							},
+							"revisesThought": map[string]any{
+								"type":        "integer",
+								"description": "The thought number being revised",
+							},
+							"branchFromThought": map[string]any{
+								"type":        "integer",
+								"description": "The thought number to branch from",
+							},
+							"branchId": map[string]any{
+								"type":        "string",
+								"description": "Identifier for the current branch",
+							},
+							"needsMoreThoughts": map[string]any{
+								"type":        "boolean",
+								"description": "Whether more thoughts are needed",
+							},
+							"track": map[string]any{
+								"type":        "string",
+								"description": "The thinking track to use (e.g., 'bug-fix', 'feature', 'security')",
+							},
+							"context": map[string]any{
+								"type":        "string",
+								"description": "Discovered tools, environment details, or filesystem context to ground the thinking",
+							},
+							"generateDiagram": map[string]any{
+								"type":        "boolean",
+								"description": "Set to true to generate a markdown-native ASCII flowchart in the response. Default is controlled by server config (DISABLE_DIAGRAM).",
+							},
+							"isPrivate": map[string]any{
+								"type":        "boolean",
+								"description": "Zero-Knowledge: If true, this thought will be redacted from the final synthesis and allWorkerThoughts.",
+							},
+							"isTainted": map[string]any{
+								"type":        "boolean",
+								"description": "Taint Analysis: Mark this thought as untrusted (e.g., if it contains data from an unverified source).",
+							},
+							"complexity": map[string]any{
+								"type":        "string",
+								"description": "Optional metadata about the task complexity to help with dynamic scaling suggestions.",
+							},
+						},
+						"required": []string{"thought", "thoughtNumber", "totalThoughts", "nextThoughtNeeded"},
+					},
+				},
+			},
+			Required: []string{"thoughts"},
+		},
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args struct {
+		Thoughts []ThoughtData `json:"thoughts"`
+	}) (res *mcp.CallToolResult, resObj any, resErr error) {
+		resp, err := thinkingServer.ProcessBatchThoughts(args.Thoughts)
+		if err != nil {
+			return &mcp.CallToolResult{
+				IsError: true,
+				Content: []mcp.Content{
+					&mcp.TextContent{Text: err.Error()},
+				},
+			}, nil, nil
+		}
+
+		jsonResp, _ := json.MarshalIndent(resp, "", "  ")
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: string(jsonResp)},
+			},
+		}, resp, nil
+	})
+
 	// Register the reset_thinking tool
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "reset_thinking",

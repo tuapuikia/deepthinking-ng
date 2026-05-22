@@ -474,6 +474,22 @@ func (s *DeepThinkingServer) ProcessThought(input ThoughtData) (resp ThoughtResp
 	return resp, nil
 }
 
+// ProcessBatchThoughts processes multiple thinking steps sequentially and returns the final response.
+func (s *DeepThinkingServer) ProcessBatchThoughts(inputs []ThoughtData) (resp ThoughtResponse, err error) {
+	if len(inputs) == 0 {
+		return ThoughtResponse{}, fmt.Errorf("no thoughts provided in batch")
+	}
+
+	for i, input := range inputs {
+		r, err := s.ProcessThought(input)
+		if err != nil {
+			return ThoughtResponse{}, fmt.Errorf("error processing thought %d in batch: %w", i+1, err)
+		}
+		resp = r
+	}
+	return resp, nil
+}
+
 func (s *DeepThinkingServer) synthesizeSuperIdea(thoughts []ThoughtData, track string, context string, isTainted bool) string {
 	var sb strings.Builder
 	sb.WriteString("🚀 SUPER IDEA SYNTHESIS\n")
