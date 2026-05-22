@@ -11,3 +11,4 @@ deepthinking-ng.sha256
 checksum.log
 verify.log
 docker_build.log
+rebuild.log
