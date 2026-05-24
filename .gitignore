@@ -12,3 +12,5 @@ checksum.log
 verify.log
 docker_build.log
 rebuild.log
+.antigravitycli
+.gemini/backup
