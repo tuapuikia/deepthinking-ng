@@ -1,10 +1,13 @@
 package main
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -63,6 +66,7 @@ type SharedMemoryManager struct {
 	mu        sync.Mutex
 	sessionID string
 	shmPath   string
+	aead      cipher.AEAD
 }
 
 func NewSharedMemoryManager(shmRoot string) *SharedMemoryManager {
@@ -120,10 +124,53 @@ func NewSharedMemoryManager(shmRoot string) *SharedMemoryManager {
 	fmt.Fprintf(os.Stderr, "Shared memory initialized with random session ID: %s\n", sessionID)
 	fmt.Fprintf(os.Stderr, "Path: %s\n", shmPath)
 
+	// Initialize encryption (AES-256-GCM)
+	// Go's crypto/aes automatically uses AES-NI if available.
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		fmt.Fprintf(os.Stderr, "Fatal: failed to generate encryption key: %v\n", err)
+		os.Exit(1)
+	}
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Fatal: failed to create AES cipher: %v\n", err)
+		os.Exit(1)
+	}
+
+	aead, err := cipher.NewGCM(block)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Fatal: failed to create GCM: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Fprintf(os.Stderr, "Shared memory encryption initialized: AES-256-GCM (Hardware Acceleration: Automatic)\n")
+
 	return &SharedMemoryManager{
 		sessionID: sessionID,
 		shmPath:   shmPath,
+		aead:      aead,
 	}
+}
+
+func (m *SharedMemoryManager) encrypt(data []byte) ([]byte, error) {
+	nonce := make([]byte, m.aead.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, fmt.Errorf("failed to generate nonce: %w", err)
+	}
+
+	// Seal appends the ciphertext and tag to the nonce
+	return m.aead.Seal(nonce, nonce, data, nil), nil
+}
+
+func (m *SharedMemoryManager) decrypt(data []byte) ([]byte, error) {
+	ns := m.aead.NonceSize()
+	if len(data) < ns {
+		return nil, errors.New("ciphertext too short")
+	}
+
+	nonce, ciphertext := data[:ns], data[ns:]
+	return m.aead.Open(nil, nonce, ciphertext, nil)
 }
 
 func (m *SharedMemoryManager) GetSessionID() string {
@@ -155,8 +202,14 @@ func (m *SharedMemoryManager) SaveThought(phase string, workerID int, data Thoug
 		return fmt.Errorf("failed to marshal thought: %w", err)
 	}
 
+	// Encrypt the data before writing to shm
+	encrypted, err := m.encrypt(bytes)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt thought: %w", err)
+	}
+
 	// Use restrictive permissions (0600)
-	if err := os.WriteFile(path, bytes, 0600); err != nil {
+	if err := os.WriteFile(path, encrypted, 0600); err != nil {
 		return fmt.Errorf("failed to write to shm: %w", err)
 	}
 
@@ -191,8 +244,15 @@ func (m *SharedMemoryManager) GetPhaseThoughts(phase string) ([]ThoughtData, err
 				continue
 			}
 
+			// Decrypt the data
+			decrypted, err := m.decrypt(bytes)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to decrypt shm file %s: %v (skipping)\n", file.Name(), err)
+				continue
+			}
+
 			var data ThoughtData
-			if err := json.Unmarshal(bytes, &data); err == nil {
+			if err := json.Unmarshal(decrypted, &data); err == nil {
 				thoughts = append(thoughts, data)
 			}
 		}

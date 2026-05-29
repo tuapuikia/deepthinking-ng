@@ -1,0 +1,8 @@
+.git
+.antigravitycli
+.gemini
+dist
+deepthinking-ng
+deepthinking-ng-*
+*.sha256
+build.log

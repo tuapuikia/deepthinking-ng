@@ -17,6 +17,7 @@ A high-performance DeepThinking MCP server with **GPT (Gather, Process, Test)** 
 - **LLM-Powered Synthesis**: Dynamically synthesizes multiple worker perspectives into a single, high-fidelity "Super Idea" using track-specific strategic prompts. Custom tracks receive generalized high-quality engineering guidance.
 - **Context-Aware Thinking**: Allows injecting repository-specific context (e.g., tool discovery, environment info, or code patterns) into the thinking process via the `context` parameter, ensuring grounded and relevant reasoning.
 - **Visual Thinking (Markdown Flowchart)**: Generates a markdown-native ASCII flowchart of the thinking process. This is **enabled by default** and automatically saved to `deepthinking-flow.md` for persistent review.
+- **Hardware-Accelerated Encryption**: Transparently encrypts all thoughts in shared memory using **AES-256-GCM** with **AES-NI** hardware acceleration (automatic software fallback included).
 - **Cross-Platform Shared Memory**: High-performance coordination between workers using volatile storage:
   - **Linux**: `/dev/shm` (RAM-based)
   - **macOS**: `/tmp` or `/private/tmp`
@@ -43,6 +44,7 @@ The server implements **Deep Redaction** at the entry point:
 - **Strict Path Enforcement**: The `SHM_ROOT` is strictly restricted to volatile storage areas (e.g., `/dev/shm` on Linux, `/tmp` on macOS, or `%TEMP%` on Windows). Any attempt to use paths outside these areas will result in a fallback to the default safe path for the current OS.
 - **Restrictive Permissions**: All directories and files created in shared memory use restrictive permissions (`0700` for directories, `0600` for files), ensuring only the user running the server can access them.
 - **Session Isolation**: Each session is isolated into its own subdirectory using a random UUID to prevent cross-session data leakage.
+- **Authenticated Encryption**: All data stored in shared memory is encrypted with a session-based random key. This protects the "fort" against unauthorized memory access on the host.
 
 ### Secure Deployment Recommendation
 For maximum security, it is highly recommended to run this MCP server in an **isolated environment**, such as a Docker container or a dedicated sandbox. While the server implements multiple layers of protection (Deep Redaction, restrictive permissions, and path enforcement), running in a shared environment still carries inherent risks. 
