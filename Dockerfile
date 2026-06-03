@@ -19,7 +19,7 @@ RUN for platform in linux/amd64 linux/arm64 windows/amd64 darwin/amd64 darwin/ar
         arch=$(echo $platform | cut -d/ -f2); \
         ext=""; [ "$os" = "windows" ] && ext=".exe"; \
         echo "Building $os/$arch..."; \
-        CGO_ENABLED=0 GOEXPERIMENT=boringcrypto GOOS=$os GOARCH=$arch go build -trimpath -ldflags="-buildid=" -o deepthinking-ng-$os-$arch$ext .; \
+        CGO_ENABLED=0 GOEXPERIMENT=boringcrypto GOOS=$os GOARCH=$arch go build -trimpath -buildvcs=false -ldflags="-buildid=" -o deepthinking-ng-$os-$arch$ext .; \
     done && \
     sha256sum deepthinking-ng-* > checksums.txt
 

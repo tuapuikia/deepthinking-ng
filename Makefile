@@ -1,5 +1,5 @@
 BINARY_NAME = deepthinking-ng
-BUILD_FLAGS = -trimpath -ldflags="-buildid="
+BUILD_FLAGS = -trimpath -buildvcs=false -ldflags="-buildid="
 # Reference Go version for reproducible builds: 1.26.2
 GO_VERSION = 1.26.2
 
