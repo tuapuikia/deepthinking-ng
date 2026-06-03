@@ -17,7 +17,8 @@ A high-performance DeepThinking MCP server with **GPT (Gather, Process, Test)** 
 - **LLM-Powered Synthesis**: Dynamically synthesizes multiple worker perspectives into a single, high-fidelity "Super Idea" using track-specific strategic prompts. Custom tracks receive generalized high-quality engineering guidance.
 - **Context-Aware Thinking**: Allows injecting repository-specific context (e.g., tool discovery, environment info, or code patterns) into the thinking process via the `context` parameter, ensuring grounded and relevant reasoning.
 - **Visual Thinking (Markdown Flowchart)**: Generates a markdown-native ASCII flowchart of the thinking process. This is **enabled by default** and automatically saved to `deepthinking-flow.md` for persistent review.
-- **Hardware-Accelerated Encryption**: Transparently encrypts all thoughts in shared memory using **AES-256-GCM** with **AES-NI** hardware acceleration (automatic software fallback included).
+- **Hardware-Accelerated Encryption**: Transparently encrypts all thoughts in shared memory using **AES-256-GCM**.
+- **Strict Hardware Requirement**: This build is pinned to **AES-NI** hardware acceleration for security integrity. It will **not** fall back to software; CPUs without AES-NI will trigger an "Illegal instruction" (Exit Code 132).
 - **Cross-Platform Shared Memory**: High-performance coordination between workers using volatile storage:
   - **Linux**: `/dev/shm` (RAM-based)
   - **macOS**: `/tmp` or `/private/tmp`
@@ -46,8 +47,10 @@ The server implements **Deep Redaction** at the entry point:
 - **Session Isolation**: Each session is isolated into its own subdirectory using a random UUID to prevent cross-session data leakage.
 - **Authenticated Encryption**: All data stored in shared memory is encrypted with a session-based random key. This protects the "fort" against unauthorized memory access on the host.
 
-### Secure Deployment Recommendation
-For maximum security, it is highly recommended to run this MCP server in an **isolated environment**, such as a Docker container or a dedicated sandbox. While the server implements multiple layers of protection (Deep Redaction, restrictive permissions, and path enforcement), running in a shared environment still carries inherent risks. 
+### FIPS & Hardware Integrity
+DeepThinking-NG is built with **GOEXPERIMENT=boringcrypto**, linking against a FIPS-validated BoringSSL module.
+- **AES-NI Required**: To maintain strict security boundaries, software fallbacks are disabled.
+- **Fail-Fast**: If the binary is run on a CPU without AES-NI support, it will trigger `SIGILL` (Exit Code 132) during the self-test phase. This is intentional to prevent unaccelerated/unvalidated code paths.
 
 **User Responsibility**: Ensuring the "fort" is secure is a shared responsibility. While the code tries its best to avoid leakage, you should ensure the environment where the server runs is properly secured and isolated to prevent any potential data exposure.
 
@@ -56,7 +59,7 @@ For maximum security, it is highly recommended to run this MCP server in an **is
 ### Local Build
 For a quick local build:
 ```bash
-go build -o deepthinking-ng .
+CGO_ENABLED=1 GOEXPERIMENT=boringcrypto go build -o deepthinking-ng .
 ```
 
 ### Reproducible Builds
