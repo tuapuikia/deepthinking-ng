@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"crypto/boring"
 )
 
 func main() {
@@ -55,6 +56,7 @@ func main() {
 	fmt.Fprintf(os.Stderr, "Diagram generation: %v\n", defaultEnableDiagram)
 
 	thinkingServer := NewDeepThinkingServer(*workerCount, *maxWorkerCount, *shmRoot, defaultEnableDiagram)
+	fmt.Fprintf(os.Stderr, "BoringCrypto (FIPS): %v\n", boring.Enabled())
 
 	// Register the deepthinking tool (Hybrid Mode: Supports both Single and Batch/Turbo)
 	mcp.AddTool(s, &mcp.Tool{

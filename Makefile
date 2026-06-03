@@ -7,8 +7,8 @@ GO_VERSION = 1.26.2
 	build-windows build-darwin build-darwin-amd64 build-darwin-arm64 build-linux build-linux-amd64 build-linux-arm64 build-all
 
 build:
-	@echo "Building static binary locally..."
-	CGO_ENABLED=0 GOEXPERIMENT=boringcrypto go build $(BUILD_FLAGS) -o $(BINARY_NAME) .
+	@echo "Building glibc binary locally (Ubuntu/Debian compatible)..."
+	CGO_ENABLED=1 GOEXPERIMENT=boringcrypto go build $(BUILD_FLAGS) -o $(BINARY_NAME) .
 	@echo "Binary SHA256:"
 	@sha256sum $(BINARY_NAME) || shasum -a 256 $(BINARY_NAME)
 
@@ -29,14 +29,20 @@ build-darwin-arm64:
 build-linux: build-linux-amd64 build-linux-arm64
 
 build-linux-amd64:
-	@echo "Building for Linux (amd64)..."
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(BUILD_FLAGS) -o $(BINARY_NAME)-linux-amd64 .
+	@echo "Building for Linux (amd64 glibc)..."
+	CGO_ENABLED=1 GOOS=linux GOARCH=amd64 GOEXPERIMENT=boringcrypto go build $(BUILD_FLAGS) -o $(BINARY_NAME)-linux-amd64 .
+
+build-linux-musl:
+	@echo "Building for Linux (amd64 musl)..."
+	# Note: This usually requires an Alpine host or cross-compiler. 
+	# Prefer 'make docker-reproducible-build' for musl targets.
+	CGO_ENABLED=1 GOOS=linux GOARCH=amd64 GOEXPERIMENT=boringcrypto go build $(BUILD_FLAGS) -o $(BINARY_NAME)-linux-amd64-musl .
 
 build-linux-arm64:
-	@echo "Building for Linux (arm64)..."
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(BUILD_FLAGS) -o $(BINARY_NAME)-linux-arm64 .
+	@echo "Building for Linux (arm64 glibc)..."
+	CGO_ENABLED=1 GOOS=linux GOARCH=arm64 GOEXPERIMENT=boringcrypto go build $(BUILD_FLAGS) -o $(BINARY_NAME)-linux-arm64 .
 
-build-all: build-windows build-darwin build-linux
+build-all: build-windows build-darwin build-linux build-linux-musl
 
 docker-reproducible-build:
 	@echo "Building all binaries inside Docker (Go $(GO_VERSION))..."
@@ -44,14 +50,15 @@ docker-reproducible-build:
 	@docker rm -f $(BINARY_NAME)-temp 2>/dev/null || true
 	docker create --name $(BINARY_NAME)-temp $(BINARY_NAME)-builder
 	@mkdir -p dist
-	docker cp $(BINARY_NAME)-temp:/app/checksums.txt ./dist/checksums.txt
-	docker cp $(BINARY_NAME)-temp:/app/deepthinking-ng-linux-amd64 ./dist/
-	docker cp $(BINARY_NAME)-temp:/app/deepthinking-ng-linux-arm64 ./dist/
-	docker cp $(BINARY_NAME)-temp:/app/deepthinking-ng-windows-amd64.exe ./dist/
-	docker cp $(BINARY_NAME)-temp:/app/deepthinking-ng-darwin-amd64 ./dist/
-	docker cp $(BINARY_NAME)-temp:/app/deepthinking-ng-darwin-arm64 ./dist/
-	# Also copy Linux binary to root for compatibility with other targets
-	docker cp $(BINARY_NAME)-temp:/app/deepthinking-ng-linux-amd64 ./$(BINARY_NAME)
+	docker cp $(BINARY_NAME)-temp:/app/dist/checksums.txt ./dist/checksums.txt
+	docker cp $(BINARY_NAME)-temp:/app/dist/deepthinking-ng-linux-amd64 ./dist/
+	docker cp $(BINARY_NAME)-temp:/app/dist/deepthinking-ng-linux-amd64-musl ./dist/
+	docker cp $(BINARY_NAME)-temp:/app/dist/deepthinking-ng-linux-arm64 ./dist/
+	docker cp $(BINARY_NAME)-temp:/app/dist/deepthinking-ng-windows-amd64.exe ./dist/
+	docker cp $(BINARY_NAME)-temp:/app/dist/deepthinking-ng-darwin-amd64 ./dist/
+	docker cp $(BINARY_NAME)-temp:/app/dist/deepthinking-ng-darwin-arm64 ./dist/
+	# Also copy Linux glibc binary to root for compatibility
+	docker cp $(BINARY_NAME)-temp:/app/dist/deepthinking-ng-linux-amd64 ./$(BINARY_NAME)
 	docker rm $(BINARY_NAME)-temp
 	@echo "Build complete. Binaries and checksums are in the 'dist' directory."
 	@cat ./dist/checksums.txt
