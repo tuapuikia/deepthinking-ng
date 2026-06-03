@@ -1,5 +1,7 @@
 FROM golang:1.26.2-alpine AS builder
 
+RUN apk add --no-cache build-base
+
 WORKDIR /app
 
 # Copy go.mod and go.sum
@@ -17,7 +19,9 @@ RUN for platform in linux/amd64 linux/arm64 windows/amd64 darwin/amd64 darwin/ar
         arch=$(echo $platform | cut -d/ -f2); \
         ext=""; [ "$os" = "windows" ] && ext=".exe"; \
         echo "Building $os/$arch..."; \
-        CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags="-buildid=" -o deepthinking-ng-$os-$arch$ext .; \
+        cgo_val=0; [ "$os" = "linux" ] && [ "$arch" = "amd64" ] && cgo_val=1; \
+        exp_val=""; [ "$cgo_val" = "1" ] && exp_val="boringcrypto"; \
+        CGO_ENABLED=$cgo_val GOEXPERIMENT=$exp_val GOOS=$os GOARCH=$arch go build -trimpath -ldflags="-buildid=" -o deepthinking-ng-$os-$arch$ext .; \
     done && \
     sha256sum deepthinking-ng-* > checksums.txt
 

@@ -144,7 +144,7 @@ func NewSharedMemoryManager(shmRoot string) *SharedMemoryManager {
 		os.Exit(1)
 	}
 
-	fmt.Fprintf(os.Stderr, "Shared memory encryption initialized: AES-256-GCM (Hardware Acceleration: Automatic)\n")
+	fmt.Fprintf(os.Stderr, "Shared memory encryption initialized: AES-256-GCM (BoringCrypto enabled)\n")
 
 	return &SharedMemoryManager{
 		sessionID: sessionID,
