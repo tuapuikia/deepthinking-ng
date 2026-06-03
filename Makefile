@@ -7,8 +7,8 @@ GO_VERSION = 1.26.2
 	build-windows build-darwin build-darwin-amd64 build-darwin-arm64 build-linux build-linux-amd64 build-linux-arm64 build-all
 
 build:
-	@echo "Building binary locally..."
-	CGO_ENABLED=1 GOEXPERIMENT=boringcrypto go build $(BUILD_FLAGS) -o $(BINARY_NAME) .
+	@echo "Building static binary locally..."
+	CGO_ENABLED=0 GOEXPERIMENT=boringcrypto go build $(BUILD_FLAGS) -o $(BINARY_NAME) .
 	@echo "Binary SHA256:"
 	@sha256sum $(BINARY_NAME) || shasum -a 256 $(BINARY_NAME)
 
