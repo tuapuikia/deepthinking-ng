@@ -2,6 +2,8 @@
 
 A high-performance DeepThinking MCP server with **GPT (Gather, Process, Test)** workflow, **Thinking Tracks**, and **Linux Shared Memory** support.
 
+![Design Diagram](diagram/design.png)
+
 ## Features
 
 - **GPT Workflow**:
